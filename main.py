@@ -1,6 +1,6 @@
 """
-🚀 PREMIUM DISCORD BOT - Single File Edition
-Railway-ready. Add DISCORD_TOKEN to env vars and deploy.
+PREMIUM DISCORD BOT - Single File Edition
+Railway-ready. Add DISCORD_TOKEN env var and deploy.
 """
 
 import asyncio
@@ -28,7 +28,7 @@ except ImportError:
     pass
 
 # =============================================================================
-# ============================ CONFIGURATION ==================================
+# CONFIG
 # =============================================================================
 
 TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("DISCORD_BOT_TOKEN")
@@ -42,15 +42,11 @@ BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
 
-def data_path(name: str) -> str:
-    return os.path.join(DATA_DIR, name)
+def data_path(name): return os.path.join(DATA_DIR, name)
+def backup_path(gid): return os.path.join(BACKUP_DIR, f"{gid}.json")
 
 
-def backup_path(guild_id: int) -> str:
-    return os.path.join(BACKUP_DIR, f"{guild_id}.json")
-
-
-# ---------- Role IDs (EDIT THESE) ----------
+# Role IDs
 REQUIRED_ROLES_FOR_PANEL = [1535650014565507225, 1535650018621394944]
 RESTOCK_ROLE_ID = 1535650003975147540
 DM_ROLE_ID = 1555668778635886685
@@ -64,14 +60,14 @@ JEW_MODE_ROLE_ID = 1558065787351204033
 
 LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID", "0")) or None
 
-# ---------- Economy ----------
+# Economy
 MESSAGES_PER_CREDIT = 150
 DAILY_REWARD = 5
 ROB_COOLDOWN = 7200
 ROB_SUCCESS_RATE = 0.4
 ROB_MAX_STEAL = 500
 
-# ---------- Automod ----------
+# Automod
 AUTOMOD_ENABLED = True
 SPAM_THRESHOLD = 5
 SPAM_INTERVAL = 5
@@ -79,23 +75,26 @@ MAX_MENTIONS = 5
 MAX_CAPS_PERCENT = 70
 BAD_WORDS = []
 
-# ---------- Anti-Nuke ----------
+# Anti-Nuke
 ANTINUKE_ENABLED = True
-ANTINUKE_CHANNEL_DELETE_THRESHOLD = 2
-ANTINUKE_CHANNEL_DELETE_WINDOW = 5
-ANTINUKE_CHANNEL_CREATE_THRESHOLD = 5
-ANTINUKE_CHANNEL_CREATE_WINDOW = 10
-ANTINUKE_ROLE_DELETE_THRESHOLD = 2
-ANTINUKE_ROLE_DELETE_WINDOW = 5
-ANTINUKE_BAN_THRESHOLD = 3
-ANTINUKE_BAN_WINDOW = 10
-ANTINUKE_KICK_THRESHOLD = 3
-ANTINUKE_KICK_WINDOW = 10
+AN_CH_DEL_THRESHOLD = 2
+AN_CH_DEL_WINDOW = 5
+AN_CH_CREATE_THRESHOLD = 5
+AN_CH_CREATE_WINDOW = 10
+AN_ROLE_DEL_THRESHOLD = 2
+AN_ROLE_DEL_WINDOW = 5
+AN_BAN_THRESHOLD = 3
+AN_BAN_WINDOW = 10
+AN_KICK_THRESHOLD = 3
+AN_KICK_WINDOW = 10
 
-# ---------- Ticket ----------
+# Tickets
 DEFAULT_DM_AMOUNT = 1
 DEFAULT_DM_REASON = "Invalid reason"
 MAX_TXT_FILE_SIZE = 5 * 1024 * 1024
+
+# 15x confirmations for /loadserver
+LOADSERVER_CONFIRMATIONS = 15
 
 COMMAND_PREFIXES = ["!", "a!"]
 
@@ -110,7 +109,7 @@ COLOR_GOLD = 0xF1C40F
 COLOR_PREMIUM = 0xFFD700
 
 # =============================================================================
-# ============================== LOGGING ======================================
+# LOGGING
 # =============================================================================
 
 logging.basicConfig(
@@ -121,7 +120,7 @@ logging.basicConfig(
 log = logging.getLogger("bot")
 
 # =============================================================================
-# ============================ FILE PATHS =====================================
+# FILE PATHS
 # =============================================================================
 
 KEYS_FILE = data_path("keys.json")
@@ -139,10 +138,10 @@ RR_FILE = data_path("reaction_roles.json")
 COOLDOWNS_FILE = data_path("cooldowns.json")
 
 # =============================================================================
-# ============================ SAFE JSON I/O ==================================
+# SAFE JSON I/O
 # =============================================================================
 
-def load_json(path: str, default: Any) -> Any:
+def load_json(path, default):
     if not os.path.exists(path):
         try:
             with open(path, "w", encoding="utf-8") as f:
@@ -158,7 +157,7 @@ def load_json(path: str, default: Any) -> Any:
         return default
 
 
-def save_json(path: str, data: Any) -> None:
+def save_json(path, data):
     tmp = f"{path}.tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as f:
@@ -167,12 +166,11 @@ def save_json(path: str, data: Any) -> None:
     except OSError as e:
         log.error(f"Could not save {path}: {e}")
 
-
 # =============================================================================
-# =========================== STATE HELPERS ===================================
+# STATE HELPERS
 # =============================================================================
 
-def _load_guild_state(path: str, guild_id: int) -> dict:
+def _load_guild_state(path, guild_id):
     state = load_json(path, {})
     if not isinstance(state, dict):
         state = {}
@@ -183,13 +181,13 @@ def _load_guild_state(path: str, guild_id: int) -> dict:
     return state
 
 
-def get_int_balance(path: str, guild_id: int, user_id: int) -> int:
+def get_int_balance(path, guild_id, user_id):
     state = _load_guild_state(path, guild_id)
     v = state[str(guild_id)].get(str(user_id), 0)
     return v if isinstance(v, int) and v > 0 else 0
 
 
-def set_int_balance(path: str, guild_id: int, user_id: int, amount: int) -> None:
+def set_int_balance(path, guild_id, user_id, amount):
     state = _load_guild_state(path, guild_id)
     gs = state[str(guild_id)]
     if amount > 0:
@@ -199,7 +197,7 @@ def set_int_balance(path: str, guild_id: int, user_id: int, amount: int) -> None
     save_json(path, state)
 
 
-def add_int_balance(path: str, guild_id: int, user_id: int, amount: int) -> int:
+def add_int_balance(path, guild_id, user_id, amount):
     current = get_int_balance(path, guild_id, user_id)
     new = max(0, current + amount)
     set_int_balance(path, guild_id, user_id, new)
@@ -215,7 +213,7 @@ def set_wallahi_count(g, u, a): return set_int_balance(WALLAHIS_FILE, g, u, a)
 def add_wallahi_credits(g, u, a): return add_int_balance(WALLAHIS_FILE, g, u, a)
 
 
-def has_active_invinc(guild_id: int, user_id: int) -> bool:
+def has_active_invinc(guild_id, user_id):
     state = _load_guild_state(INVINC_FILE, guild_id)
     gs = state[str(guild_id)]
     val = gs.get(str(user_id))
@@ -235,49 +233,37 @@ def has_active_invinc(guild_id: int, user_id: int) -> bool:
     save_json(INVINC_FILE, state)
     return False
 
-
 # =============================================================================
-# ============================ HELPERS ========================================
+# HELPERS
 # =============================================================================
 
-def has_role(member: discord.Member, role_id: int) -> bool:
+def has_role(member, role_id):
     return isinstance(member, discord.Member) and any(r.id == role_id for r in member.roles)
 
 
-def has_any_role(member: discord.Member, role_ids) -> bool:
+def has_any_role(member, role_ids):
     if not isinstance(member, discord.Member):
         return False
     ids = {r.id for r in member.roles}
     return any(rid in ids for rid in role_ids)
 
 
-def is_jew_mode(member) -> bool:
-    return has_role(member, JEW_MODE_ROLE_ID)
+def is_jew_mode(member): return has_role(member, JEW_MODE_ROLE_ID)
+def is_mod(member): return has_role(member, MODERATION_ROLE_ID)
 
 
-def is_mod(member) -> bool:
-    return has_role(member, MODERATION_ROLE_ID)
-
-
-def embed(title: str, description: str = "", color: int = COLOR_PRIMARY) -> discord.Embed:
+def embed(title, description="", color=COLOR_PRIMARY):
     e = discord.Embed(title=title, description=description, color=color)
     e.timestamp = datetime.now(timezone.utc)
     return e
 
 
-def success_embed(title: str, description: str = "") -> discord.Embed:
-    return embed(f"✅ {title}", description, COLOR_SUCCESS)
+def success_embed(title, description=""): return embed(f"✅ {title}", description, COLOR_SUCCESS)
+def error_embed(title, description=""): return embed(f"❌ {title}", description, COLOR_ERROR)
+def warning_embed(title, description=""): return embed(f"⚠️ {title}", description, COLOR_WARNING)
 
 
-def error_embed(title: str, description: str = "") -> discord.Embed:
-    return embed(f"❌ {title}", description, COLOR_ERROR)
-
-
-def warning_embed(title: str, description: str = "") -> discord.Embed:
-    return embed(f"⚠️ {title}", description, COLOR_WARNING)
-
-
-def parse_duration(value: str) -> timedelta:
+def parse_duration(value):
     units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
     if len(value) < 2:
         raise ValueError("Use `10m`, `2h`, or `1d`.")
@@ -289,9 +275,8 @@ def parse_duration(value: str) -> timedelta:
         raise ValueError("Duration must be between 1s and 28d.")
     return timedelta(seconds=secs)
 
-
 # =============================================================================
-# ============================= BOT CLASS =====================================
+# BOT CLASS
 # =============================================================================
 
 class PremiumBot(commands.Bot):
@@ -307,20 +292,19 @@ class PremiumBot(commands.Bot):
             help_command=None,
             case_insensitive=True,
             strip_after_prefix=True,
-            allowed_mentions=discord.AllowedMentions(
-                everyone=False, roles=False, users=True
-            ),
+            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
         )
         self.start_time = datetime.now(timezone.utc)
-        self.snipe_cache: dict[int, dict] = {}
-        self.edit_snipe_cache: dict[int, dict] = {}
+        self.snipe_cache = {}
+        self.edit_snipe_cache = {}
         self.spam_tracker = defaultdict(lambda: deque(maxlen=10))
         self.an_channel_delete = defaultdict(lambda: deque(maxlen=20))
         self.an_channel_create = defaultdict(lambda: deque(maxlen=20))
         self.an_role_delete = defaultdict(lambda: deque(maxlen=20))
         self.an_ban = defaultdict(lambda: deque(maxlen=20))
         self.an_kick = defaultdict(lambda: deque(maxlen=20))
-        self.bot_inviters: dict[int, int] = {}
+        self.bot_inviters = {}
+        self.loadserver_pending = set()
 
     async def setup_hook(self):
         self.add_view(PremiumView())
@@ -354,12 +338,9 @@ class PremiumBot(commands.Bot):
                 pass
         try:
             await self.change_presence(
-                activity=discord.Activity(
-                    type=discord.ActivityType.watching,
-                    name=f"{len(self.guilds)} servers | /help",
-                ),
-                status=discord.Status.online,
-            )
+                activity=discord.Activity(type=discord.ActivityType.watching,
+                                          name=f"{len(self.guilds)} servers | /help"),
+                status=discord.Status.online)
         except Exception as e:
             log.error(f"Presence failed: {e}")
 
@@ -386,9 +367,9 @@ class PremiumBot(commands.Bot):
                     entries = g.get("entries", [])
                     winners = random.sample(entries, min(g.get("winners", 1), len(entries))) if entries else []
                     e = embed("🎉 Giveaway Ended",
-                        f"**Prize:** {g['prize']}\n**Winners:** " +
-                        (", ".join(f"<@{w}>" for w in winners) if winners else "No entries"),
-                        COLOR_GOLD)
+                              f"**Prize:** {g['prize']}\n**Winners:** " +
+                              (", ".join(f"<@{w}>" for w in winners) if winners else "No entries"),
+                              COLOR_GOLD)
                     await msg.edit(embed=e, view=None)
                     if winners:
                         await ch.send(f"🎊 Congratulations {', '.join(f'<@{w}>' for w in winners)}! You won **{g['prize']}**!")
@@ -405,10 +386,10 @@ class PremiumBot(commands.Bot):
 bot = PremiumBot()
 
 # =============================================================================
-# =========================== SERVER BACKUP ===================================
+# SERVER BACKUP
 # =============================================================================
 
-def _serialize_overwrites(channel: discord.abc.GuildChannel) -> dict:
+def _serialize_overwrites(channel):
     out = {}
     for target, ow in channel.overwrites.items():
         allow, deny = ow.pair()
@@ -422,7 +403,7 @@ def _serialize_overwrites(channel: discord.abc.GuildChannel) -> dict:
     return out
 
 
-def serialize_guild(guild: discord.Guild) -> dict:
+def serialize_guild(guild):
     data = {
         "guild_id": guild.id,
         "guild_name": guild.name,
@@ -462,7 +443,7 @@ def serialize_guild(guild: discord.Guild) -> dict:
     return data
 
 
-async def _get_guild_owner_id(guild: discord.Guild) -> Optional[int]:
+async def _get_guild_owner_id(guild):
     if guild.owner_id:
         return guild.owner_id
     try:
@@ -472,14 +453,13 @@ async def _get_guild_owner_id(guild: discord.Guild) -> Optional[int]:
         return None
 
 
-async def _do_save(guild: discord.Guild) -> dict:
+async def _do_save(guild):
     data = serialize_guild(guild)
     save_json(backup_path(guild.id), data)
     return data
 
 
 async def serversave_logic(target):
-    """Works with both Interaction and Context targets."""
     is_interaction = isinstance(target, discord.Interaction)
     guild = target.guild
     member = target.user if is_interaction else target.author
@@ -501,12 +481,8 @@ async def serversave_logic(target):
             await target.reply(embed=msg)
         return
 
-    # Acknowledge fast
     if is_interaction:
         await target.response.defer(ephemeral=True, thinking=True)
-        responder = target.followup.send
-    else:
-        responder = target.reply
 
     try:
         data = await _do_save(guild)
@@ -529,7 +505,7 @@ async def serversave_logic(target):
             await target.reply(embed=err)
 
 
-def _overwrites_from_data(guild: discord.Guild, ow_data: dict) -> dict:
+def _overwrites_from_data(guild, ow_data):
     result = {}
     for key, payload in ow_data.items():
         try:
@@ -546,13 +522,11 @@ def _overwrites_from_data(guild: discord.Guild, ow_data: dict) -> dict:
             continue
         result[target] = discord.PermissionOverwrite.from_pair(
             discord.Permissions(payload.get("allow", 0)),
-            discord.Permissions(payload.get("deny", 0)),
-        )
+            discord.Permissions(payload.get("deny", 0)))
     return result
 
 
-async def _loadserver_core(guild: discord.Guild) -> tuple:
-    """Fast restore. Uses rate-limit-aware concurrency for speed."""
+async def _loadserver_core(guild):
     path = backup_path(guild.id)
     if not os.path.exists(path):
         return None, "No backup found for this server."
@@ -566,10 +540,8 @@ async def _loadserver_core(guild: discord.Guild) -> tuple:
               "channels_created": 0, "channels_failed": 0,
               "channels_skipped": 0, "errors": []}
 
-    # ---------- 1. ROLES ----------
     existing_roles_by_name = {r.name: r for r in guild.roles}
-    id_to_role: dict[int, discord.Role] = {}
-
+    id_to_role = {}
     roles_sorted = sorted(data.get("roles", []), key=lambda x: x.get("position", 0))
     dangerous = (discord.Permissions.administrator.value |
                  discord.Permissions.manage_guild.value |
@@ -592,18 +564,15 @@ async def _loadserver_core(guild: discord.Guild) -> tuple:
                 hoist=role_data.get("hoist", False),
                 mentionable=role_data.get("mentionable", False),
                 permissions=discord.Permissions(perms_value),
-                reason="Server restore",
-            )
+                reason="Server restore")
             id_to_role[old_id] = new_role
             report["roles_created"] += 1
         except discord.HTTPException as e:
             report["roles_failed"] += 1
             report["errors"].append(f"Role '{name}': {e}")
 
-    # ---------- 2. CATEGORIES ----------
-    id_to_category: dict[int, discord.CategoryChannel] = {}
+    id_to_category = {}
     existing_cats = {c.name: c for c in guild.categories}
-
     cats_sorted = sorted(data.get("categories", []), key=lambda x: x.get("position", 0))
     for cat_data in cats_sorted:
         old_id = cat_data["id"]
@@ -613,20 +582,17 @@ async def _loadserver_core(guild: discord.Guild) -> tuple:
             continue
         try:
             ow = _overwrites_from_data(guild, cat_data.get("overwrites", {}))
-            cat = await guild.create_category(
-                name=name, overwrites=ow, reason="Server restore",
-            )
+            cat = await guild.create_category(name=name, overwrites=ow, reason="Server restore")
             id_to_category[old_id] = cat
             report["categories_created"] += 1
         except discord.HTTPException as e:
             report["categories_failed"] += 1
             report["errors"].append(f"Category '{name}': {e}")
 
-    # ---------- 3. CHANNELS ----------
     existing_channels = {c.name: c for c in guild.channels}
     channels_sorted = sorted(data.get("channels", []), key=lambda x: x.get("position", 0))
 
-    async def _create_one(ch_data: dict) -> tuple:
+    async def _create_one(ch_data):
         name = ch_data["name"]
         if name in existing_channels:
             return "skip", name, None
@@ -643,41 +609,30 @@ async def _loadserver_core(guild: discord.Guild) -> tuple:
                     name=name, overwrites=ow, category=parent,
                     bitrate=ch_data.get("bitrate") or 64000,
                     user_limit=ch_data.get("user_limit") or 0,
-                    reason="Server restore",
-                )
+                    reason="Server restore")
             elif "stage" in ch_type:
-                await guild.create_stage_channel(
-                    name=name, overwrites=ow, category=parent, reason="Server restore",
-                )
+                await guild.create_stage_channel(name=name, overwrites=ow, category=parent, reason="Server restore")
             elif "news" in ch_type or "announcement" in ch_type:
                 try:
                     await guild.create_text_channel(
                         name=name, overwrites=ow, category=parent,
-                        topic=ch_data.get("topic") or "",
-                        news=True, reason="Server restore",
-                    )
+                        topic=ch_data.get("topic") or "", news=True, reason="Server restore")
                 except Exception:
                     await guild.create_text_channel(
                         name=name, overwrites=ow, category=parent,
-                        topic=ch_data.get("topic") or "", reason="Server restore",
-                    )
+                        topic=ch_data.get("topic") or "", reason="Server restore")
             else:
                 await guild.create_text_channel(
                     name=name, overwrites=ow, category=parent,
                     topic=ch_data.get("topic") or "",
                     slowmode_delay=ch_data.get("slowmode_delay") or 0,
                     nsfw=ch_data.get("nsfw", False),
-                    reason="Server restore",
-                )
+                    reason="Server restore")
             return "created", name, None
         except discord.HTTPException as e:
             return "failed", name, str(e)
 
-    # Fire in parallel — Discord's HTTP client handles rate-limits internally
-    results = await asyncio.gather(
-        *[_create_one(cd) for cd in channels_sorted],
-        return_exceptions=True,
-    )
+    results = await asyncio.gather(*[_create_one(cd) for cd in channels_sorted], return_exceptions=True)
     for r in results:
         if isinstance(r, Exception):
             report["channels_failed"] += 1
@@ -695,10 +650,145 @@ async def _loadserver_core(guild: discord.Guild) -> tuple:
     return report, None
 
 
+def progress_bar(step, total=LOADSERVER_CONFIRMATIONS):
+    filled = "🟩" * step
+    empty = "⬛" * (total - step)
+    return f"{filled}{empty} **{step}/{total}**"
+
+
+class LoadServerConfirmView(discord.ui.View):
+    def __init__(self, invoker_id, guild, progress_msg=None):
+        super().__init__(timeout=300)
+        self.invoker_id = invoker_id
+        self.guild = guild
+        self.step = 0
+        self.progress_msg = progress_msg
+        self.completed = False
+
+    async def interaction_check(self, interaction):
+        if interaction.user.id != self.invoker_id:
+            await interaction.response.send_message(
+                embed=error_embed("Not Yours", "Only the person who ran the command can confirm."),
+                ephemeral=True)
+            return False
+        return True
+
+    def _build_embed(self):
+        remaining = LOADSERVER_CONFIRMATIONS - self.step
+        if self.step == 0:
+            title = "⚠️ Confirm Server Restore (1/15)"
+            desc = ("**This is a dangerous operation.**\n\n"
+                    "Restoring the server will recreate all saved channels, roles, "
+                    "and categories from the backup. **Anything created after the "
+                    "backup will NOT be removed**, but this can still cause a mess.\n\n"
+                    "Click **Yes** to continue, or **Cancel** to abort.")
+        elif self.step < 5:
+            title = f"⚠️ Confirm Server Restore ({self.step + 1}/15)"
+            desc = f"Are you **sure** you want to restore the server?\n\nRemaining confirmations: **{remaining}**"
+        elif self.step < 10:
+            title = f"🚨 Confirm Server Restore ({self.step + 1}/15)"
+            desc = f"This is getting serious. Do you **really** want to restore?\n\nRemaining confirmations: **{remaining}**"
+        elif self.step < 14:
+            title = f"🔥 FINAL WARNING ({self.step + 1}/15)"
+            desc = f"Last chances. Are you **absolutely certain**?\n\nRemaining confirmations: **{remaining}**"
+        else:
+            title = "💀 LAST CONFIRMATION (15/15)"
+            desc = ("This is the **final** confirmation. Once you click Yes, the "
+                    "restore will begin immediately and **cannot** be cancelled.\n\n"
+                    "Click **Yes** to restore the server now.")
+        color = COLOR_WARNING if self.step < 10 else COLOR_ERROR
+        e = embed(title, desc, color)
+        e.add_field(name="Progress", value=progress_bar(self.step), inline=False)
+        e.set_footer(text="You have 5 minutes to complete this.")
+        return e
+
+    @discord.ui.button(label="Yes, I'm sure", style=discord.ButtonStyle.danger, emoji="✅")
+    async def yes(self, interaction, _b):
+        self.step += 1
+        if self.step >= LOADSERVER_CONFIRMATIONS:
+            self.completed = True
+            for child in self.children:
+                child.disabled = True
+            done = success_embed("All Confirmations Received",
+                                 f"You confirmed **{LOADSERVER_CONFIRMATIONS}/{LOADSERVER_CONFIRMATIONS}** times. Starting restore now...")
+            done.add_field(name="Progress", value=progress_bar(LOADSERVER_CONFIRMATIONS), inline=False)
+            await interaction.response.edit_message(embed=done, view=self)
+            self.stop()
+            await _start_loadserver_restore(self.guild, interaction.channel)
+            return
+        await interaction.response.edit_message(embed=self._build_embed(), view=self)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def cancel(self, interaction, _b):
+        self.completed = False
+        for child in self.children:
+            child.disabled = True
+        e = error_embed("Cancelled", f"Server restore aborted after **{self.step}** confirmation(s).")
+        await interaction.response.edit_message(embed=e, view=self)
+        self.stop()
+
+    async def on_timeout(self):
+        if not self.completed:
+            for child in self.children:
+                child.disabled = True
+            try:
+                if self.progress_msg:
+                    await self.progress_msg.edit(
+                        embed=error_embed("Timed Out",
+                                          f"Confirmation timed out after **{self.step}** step(s). Server was NOT restored."),
+                        view=self)
+            except discord.HTTPException:
+                pass
+
+
+async def _start_loadserver_restore(guild, channel):
+    started = warning_embed("⏳ Restoring...", "Server restore has started.")
+    progress_msg = None
+    if channel:
+        try:
+            progress_msg = await channel.send(embed=started)
+        except discord.HTTPException:
+            progress_msg = None
+
+    async def _run():
+        try:
+            report, err = await _loadserver_core(guild)
+            if err:
+                if progress_msg:
+                    try:
+                        await progress_msg.edit(embed=error_embed("Restore Failed", err))
+                    except discord.HTTPException:
+                        pass
+                return
+            e = success_embed("Server Restored", "Backup loaded successfully.")
+            e.add_field(name="Roles created", value=str(report["roles_created"]), inline=True)
+            e.add_field(name="Categories", value=str(report["categories_created"]), inline=True)
+            e.add_field(name="Channels created", value=str(report["channels_created"]), inline=True)
+            e.add_field(name="Channels skipped", value=str(report["channels_skipped"]), inline=True)
+            if report["roles_failed"] or report["categories_failed"] or report["channels_failed"]:
+                e.add_field(name="Failed",
+                            value=f"Roles: {report['roles_failed']} | Categories: {report['categories_failed']} | Channels: {report['channels_failed']}",
+                            inline=False)
+            if report["errors"]:
+                err_text = "\n".join(report["errors"][:5])
+                e.add_field(name="First errors", value=f"```{err_text[:900]}```", inline=False)
+            if progress_msg:
+                try:
+                    await progress_msg.edit(embed=e)
+                except discord.HTTPException:
+                    pass
+        except Exception as ex:
+            log.exception(f"loadserver failed: {ex}")
+            if progress_msg:
+                try:
+                    await progress_msg.edit(embed=error_embed("Restore Failed", str(ex)[:1024]))
+                except discord.HTTPException:
+                    pass
+
+    asyncio.create_task(_run())
+
+
 async def loadserver_logic(target):
-    """
-    Responds in under 1s. Restore runs in the background.
-    """
     is_interaction = isinstance(target, discord.Interaction)
     guild = target.guild
     member = target.user if is_interaction else target.author
@@ -721,70 +811,50 @@ async def loadserver_logic(target):
         return
 
     if not os.path.exists(backup_path(guild.id)):
-        msg = error_embed("No Backup", "No backup exists. Use `/serversave` or `!serversave` first.")
+        msg = error_embed("No Backup", "No backup exists. Use /serversave or !serversave first.")
         if is_interaction:
             await target.response.send_message(embed=msg, ephemeral=True)
         else:
             await target.reply(embed=msg)
         return
 
-    # ---- Respond IMMEDIATELY (< 1 second) ----
-    started_embed = warning_embed(
-        "Restoring...",
-        "The restore has started. You'll get the report here when it's done."
-    )
+    if member.id in bot.loadserver_pending:
+        msg = warning_embed("Already In Progress",
+                            "You already have a confirmation in progress. Finish or cancel it first.")
+        if is_interaction:
+            await target.response.send_message(embed=msg, ephemeral=True)
+        else:
+            await target.reply(embed=msg)
+        return
 
-    if is_interaction:
-        await target.response.send_message(embed=started_embed, ephemeral=True)
-        progress_msg = await target.original_response()
-    else:
-        progress_msg = await target.reply(embed=started_embed)
+    bot.loadserver_pending.add(member.id)
+    view = LoadServerConfirmView(member.id, guild)
 
-    # Fire-and-forget background task
-    async def _run():
-        try:
-            report, err = await _loadserver_core(guild)
-            if err:
-                await progress_msg.edit(embed=error_embed("Restore Failed", err))
-                return
-            e = success_embed("Server Restored", "Backup loaded successfully.")
-            e.add_field(name="Roles created", value=str(report["roles_created"]), inline=True)
-            e.add_field(name="Categories", value=str(report["categories_created"]), inline=True)
-            e.add_field(name="Channels created", value=str(report["channels_created"]), inline=True)
-            e.add_field(name="Channels skipped", value=str(report["channels_skipped"]), inline=True)
-            if report["roles_failed"] or report["categories_failed"] or report["channels_failed"]:
-                e.add_field(name="Failed", value=(
-                    f"Roles: {report['roles_failed']} | "
-                    f"Categories: {report['categories_failed']} | "
-                    f"Channels: {report['channels_failed']}"
-                ), inline=False)
-            if report["errors"]:
-                err_text = "\n".join(report["errors"][:5])
-                e.add_field(name="First errors", value=f"```{err_text[:900]}```", inline=False)
-            try:
-                await progress_msg.edit(embed=e)
-            except discord.HTTPException:
-                pass
-        except Exception as ex:
-            log.exception(f"loadserver failed: {ex}")
-            try:
-                await progress_msg.edit(embed=error_embed("Restore Failed", str(ex)[:1024]))
-            except discord.HTTPException:
-                pass
+    try:
+        if is_interaction:
+            await target.response.send_message(embed=view._build_embed(), view=view, ephemeral=True)
+            view.progress_msg = await target.original_response()
+        else:
+            msg = await target.reply(embed=view._build_embed(), view=view)
+            view.progress_msg = msg
+    except discord.HTTPException as e:
+        log.error(f"Could not start loadserver confirm: {e}")
+        bot.loadserver_pending.discard(member.id)
+        return
 
-    asyncio.create_task(_run())
-
+    async def _cleanup():
+        await view.wait()
+        bot.loadserver_pending.discard(member.id)
+    asyncio.create_task(_cleanup())
 
 # =============================================================================
-# =========================== BOT EVENTS ======================================
+# BOT EVENTS
 # =============================================================================
 
 @bot.event
-async def on_message(message: discord.Message):
+async def on_message(message):
     if message.author.bot:
-        return
-
-    if isinstance(message.channel, discord.DMChannel):
+        return    if isinstance(message.channel, discord.DMChannel):
         await _handle_dm_feedback(message)
         return
 
@@ -810,19 +880,18 @@ async def on_message(message: discord.Message):
 
 
 @bot.event
-async def on_message_delete(message: discord.Message):
+async def on_message_delete(message):
     if message.author.bot or not message.guild:
         return
     bot.snipe_cache[message.channel.id] = {
         "author": str(message.author),
         "author_id": message.author.id,
         "content": message.content,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+        "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @bot.event
-async def on_message_edit(before: discord.Message, after: discord.Message):
+async def on_message_edit(before, after):
     if before.author.bot or not before.guild or before.content == after.content:
         return
     bot.edit_snipe_cache[before.channel.id] = {
@@ -830,13 +899,13 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
         "author_id": before.author.id,
         "before": before.content,
         "after": after.content,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+        "timestamp": datetime.now(timezone.utc).isoformat()}
 
+# =============================================================================
+# ANTI-NUKE
+# =============================================================================
 
-# ---------- ANTINUKE ----------
-
-async def _get_audit_actor(guild: discord.Guild, action: discord.AuditLogAction, target_id: int):
+async def _get_audit_actor(guild, action, target_id):
     try:
         async for entry in guild.audit_logs(limit=10, action=action):
             if entry.target and getattr(entry.target, "id", None) == target_id:
@@ -846,7 +915,7 @@ async def _get_audit_actor(guild: discord.Guild, action: discord.AuditLogAction,
     return None, None
 
 
-async def _antinuke_punish(guild: discord.Guild, actor: discord.abc.User, reason: str, invite_check: bool = False):
+async def _antinuke_punish(guild, actor, reason, invite_check=False):
     if actor.id == bot.user.id:
         return
     if actor.id == guild.owner_id:
@@ -855,19 +924,17 @@ async def _antinuke_punish(guild: discord.Guild, actor: discord.abc.User, reason
         member = guild.get_member(actor.id) or await guild.fetch_member(actor.id)
     except (discord.NotFound, discord.HTTPException):
         member = None
-
     if member and guild.me and member.top_role >= guild.me.top_role:
-        log.warning(f"[ANTINUKE] Cannot ban {actor} — role too high.")
-        await _antinuke_log(guild, f"⚠️ Could not ban **{actor}** ({actor.id}) — role is above mine.")
+        log.warning(f"[ANTINUKE] Cannot ban {actor} - role too high.")
+        await _antinuke_log(guild, f"⚠️ Could not ban **{actor}** ({actor.id}) - role is above mine.")
         return
-
     try:
         await guild.ban(actor, reason=f"Anti-Nuke: {reason}", delete_message_days=1)
-        await _antinuke_log(guild, f"🔨 Banned **{actor}** (`{actor.id}`) — {reason}")
+        await _antinuke_log(guild, f"🔨 Banned **{actor}** (`{actor.id}`) - {reason}")
     except discord.Forbidden:
-        await _antinuke_log(guild, f"⚠️ Failed to ban **{actor}** — missing permissions.")
+        await _antinuke_log(guild, f"⚠️ Failed to ban **{actor}** - missing permissions.")
     except discord.HTTPException as e:
-        await _antinuke_log(guild, f"⚠️ Error banning **{actor}** — {e}")
+        await _antinuke_log(guild, f"⚠️ Error banning **{actor}** - {e}")
 
     if invite_check and isinstance(actor, (discord.User, discord.Member)) and actor.bot:
         inviter_id = bot.bot_inviters.get(actor.id)
@@ -886,7 +953,7 @@ async def _antinuke_punish(guild: discord.Guild, actor: discord.abc.User, reason
                 inviter_member = None
             if inviter_member:
                 if guild.me and inviter_member.top_role >= guild.me.top_role:
-                    await _antinuke_log(guild, f"⚠️ Could not ban inviter <@{inviter_id}> — role too high.")
+                    await _antinuke_log(guild, f"⚠️ Could not ban inviter <@{inviter_id}> - role too high.")
                 else:
                     try:
                         await guild.ban(inviter_member,
@@ -897,7 +964,7 @@ async def _antinuke_punish(guild: discord.Guild, actor: discord.abc.User, reason
                         await _antinuke_log(guild, f"⚠️ Could not ban inviter <@{inviter_id}>: {e}")
 
 
-async def _antinuke_log(guild: discord.Guild, text: str):
+async def _antinuke_log(guild, text):
     log.info(f"[ANTINUKE] {guild.name}: {text}")
     if not LOG_CHANNEL_ID:
         return
@@ -911,7 +978,7 @@ async def _antinuke_log(guild: discord.Guild, text: str):
 
 
 @bot.event
-async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
+async def on_guild_channel_delete(channel):
     if not ANTINUKE_ENABLED:
         return
     guild = channel.guild
@@ -921,19 +988,15 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
     dq = bot.an_channel_delete[guild.id]
     dq.append((time.time(), actor.id))
     now = time.time()
-    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_CHANNEL_DELETE_WINDOW]
-    if len(same_actor) >= ANTINUKE_CHANNEL_DELETE_THRESHOLD:
-        await _antinuke_log(guild,
-            f"🚨 **{actor}** deleted {len(same_actor)} channels in {ANTINUKE_CHANNEL_DELETE_WINDOW}s "
-            f"(last: `#{channel.name}`). Banning.")
-        await _antinuke_punish(guild, actor,
-            f"deleted {len(same_actor)} channels in {ANTINUKE_CHANNEL_DELETE_WINDOW}s",
-            invite_check=True)
+    same = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= AN_CH_DEL_WINDOW]
+    if len(same) >= AN_CH_DEL_THRESHOLD:
+        await _antinuke_log(guild, f"🚨 **{actor}** deleted {len(same)} channels in {AN_CH_DEL_WINDOW}s (last: `#{channel.name}`). Banning.")
+        await _antinuke_punish(guild, actor, f"deleted {len(same)} channels in {AN_CH_DEL_WINDOW}s", invite_check=True)
         dq.clear()
 
 
 @bot.event
-async def on_guild_channel_create(channel: discord.abc.GuildChannel):
+async def on_guild_channel_create(channel):
     if not ANTINUKE_ENABLED:
         return
     guild = channel.guild
@@ -943,18 +1006,15 @@ async def on_guild_channel_create(channel: discord.abc.GuildChannel):
     dq = bot.an_channel_create[guild.id]
     dq.append((time.time(), actor.id))
     now = time.time()
-    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_CHANNEL_CREATE_WINDOW]
-    if len(same_actor) >= ANTINUKE_CHANNEL_CREATE_THRESHOLD:
-        await _antinuke_log(guild,
-            f"🚨 **{actor}** created {len(same_actor)} channels in {ANTINUKE_CHANNEL_CREATE_WINDOW}s. Banning.")
-        await _antinuke_punish(guild, actor,
-            f"mass channel creation ({len(same_actor)} in {ANTINUKE_CHANNEL_CREATE_WINDOW}s)",
-            invite_check=True)
+    same = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= AN_CH_CREATE_WINDOW]
+    if len(same) >= AN_CH_CREATE_THRESHOLD:
+        await _antinuke_log(guild, f"🚨 **{actor}** created {len(same)} channels in {AN_CH_CREATE_WINDOW}s. Banning.")
+        await _antinuke_punish(guild, actor, f"mass channel creation ({len(same)} in {AN_CH_CREATE_WINDOW}s)", invite_check=True)
         dq.clear()
 
 
 @bot.event
-async def on_guild_role_delete(role: discord.Role):
+async def on_guild_role_delete(role):
     if not ANTINUKE_ENABLED:
         return
     guild = role.guild
@@ -964,18 +1024,15 @@ async def on_guild_role_delete(role: discord.Role):
     dq = bot.an_role_delete[guild.id]
     dq.append((time.time(), actor.id))
     now = time.time()
-    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_ROLE_DELETE_WINDOW]
-    if len(same_actor) >= ANTINUKE_ROLE_DELETE_THRESHOLD:
-        await _antinuke_log(guild,
-            f"🚨 **{actor}** deleted {len(same_actor)} roles in {ANTINUKE_ROLE_DELETE_WINDOW}s. Banning.")
-        await _antinuke_punish(guild, actor,
-            f"deleted {len(same_actor)} roles in {ANTINUKE_ROLE_DELETE_WINDOW}s",
-            invite_check=True)
+    same = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= AN_ROLE_DEL_WINDOW]
+    if len(same) >= AN_ROLE_DEL_THRESHOLD:
+        await _antinuke_log(guild, f"🚨 **{actor}** deleted {len(same)} roles in {AN_ROLE_DEL_WINDOW}s. Banning.")
+        await _antinuke_punish(guild, actor, f"deleted {len(same)} roles in {AN_ROLE_DEL_WINDOW}s", invite_check=True)
         dq.clear()
 
 
 @bot.event
-async def on_member_ban(guild: discord.Guild, user: discord.User):
+async def on_member_ban(guild, user):
     if not ANTINUKE_ENABLED:
         return
     actor, entry = await _get_audit_actor(guild, discord.AuditLogAction.ban, user.id)
@@ -984,18 +1041,15 @@ async def on_member_ban(guild: discord.Guild, user: discord.User):
     dq = bot.an_ban[guild.id]
     dq.append((time.time(), actor.id))
     now = time.time()
-    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_BAN_WINDOW]
-    if len(same_actor) >= ANTINUKE_BAN_THRESHOLD:
-        await _antinuke_log(guild,
-            f"🚨 **{actor}** banned {len(same_actor)} members in {ANTINUKE_BAN_WINDOW}s. Banning.")
-        await _antinuke_punish(guild, actor,
-            f"mass banning ({len(same_actor)} in {ANTINUKE_BAN_WINDOW}s)",
-            invite_check=True)
+    same = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= AN_BAN_WINDOW]
+    if len(same) >= AN_BAN_THRESHOLD:
+        await _antinuke_log(guild, f"🚨 **{actor}** banned {len(same)} members in {AN_BAN_WINDOW}s. Banning.")
+        await _antinuke_punish(guild, actor, f"mass banning ({len(same)} in {AN_BAN_WINDOW}s)", invite_check=True)
         dq.clear()
 
 
 @bot.event
-async def on_member_remove(member: discord.Member):
+async def on_member_remove(member):
     if not ANTINUKE_ENABLED:
         return
     guild = member.guild
@@ -1012,18 +1066,15 @@ async def on_member_remove(member: discord.Member):
     dq = bot.an_kick[guild.id]
     dq.append((time.time(), actor.id))
     now = time.time()
-    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_KICK_WINDOW]
-    if len(same_actor) >= ANTINUKE_KICK_THRESHOLD:
-        await _antinuke_log(guild,
-            f"🚨 **{actor}** kicked {len(same_actor)} members in {ANTINUKE_KICK_WINDOW}s. Banning.")
-        await _antinuke_punish(guild, actor,
-            f"mass kicking ({len(same_actor)} in {ANTINUKE_KICK_WINDOW}s)",
-            invite_check=True)
+    same = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= AN_KICK_WINDOW]
+    if len(same) >= AN_KICK_THRESHOLD:
+        await _antinuke_log(guild, f"🚨 **{actor}** kicked {len(same)} members in {AN_KICK_WINDOW}s. Banning.")
+        await _antinuke_punish(guild, actor, f"mass kicking ({len(same)} in {AN_KICK_WINDOW}s)", invite_check=True)
         dq.clear()
 
 
 @bot.event
-async def on_member_join(member: discord.Member):
+async def on_member_join(member):
     if member.bot:
         try:
             async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.bot_add):
@@ -1033,14 +1084,17 @@ async def on_member_join(member: discord.Member):
         except (discord.Forbidden, discord.HTTPException):
             pass
 
+# =============================================================================
+# COMMAND ERRORS
+# =============================================================================
 
 @bot.event
-async def on_command_error(ctx: commands.Context, error: commands.CommandError):
+async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
     if isinstance(error, commands.MissingRequiredArgument):
         e = error_embed("Missing Argument",
-            f"`{error.param.name}` is required.\n**Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`")
+                        f"`{error.param.name}` is required.\n**Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`")
     elif isinstance(error, commands.BadArgument):
         e = error_embed("Invalid Argument", "One of your arguments couldn't be parsed.")
     elif isinstance(error, commands.MissingPermissions):
@@ -1061,7 +1115,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
 
 
 @bot.tree.error
-async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+async def on_app_command_error(interaction, error):
     if isinstance(error, app_commands.CommandOnCooldown):
         e = warning_embed("Slow Down!", f"Try again in **{error.retry_after:.1f}s**.")
     elif isinstance(error, app_commands.MissingPermissions):
@@ -1079,12 +1133,11 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     except discord.HTTPException:
         pass
 
-
 # =============================================================================
-# ============================ EVENT HELPERS ==================================
+# EVENT HELPERS
 # =============================================================================
 
-async def _handle_dm_feedback(message: discord.Message):
+async def _handle_dm_feedback(message):
     pending = load_json(FEEDBACK_FILE, {"pending": {}, "log": []})
     if not isinstance(pending, dict):
         return
@@ -1096,8 +1149,7 @@ async def _handle_dm_feedback(message: discord.Message):
         "user_id": message.author.id,
         "ticket_id": entry.get("ticket_id"),
         "rating": message.content.strip(),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+        "timestamp": datetime.now(timezone.utc).isoformat()})
     del p[str(message.author.id)]
     save_json(FEEDBACK_FILE, pending)
     try:
@@ -1106,9 +1158,10 @@ async def _handle_dm_feedback(message: discord.Message):
         pass
 
 
-async def _handle_key_drop(message: discord.Message):
+async def _handle_key_drop(message):
     def parse(text):
         return [k.strip() for k in text.split() if k.strip()]
+
     collected = []
     if message.content and message.content.strip():
         collected.extend(parse(message.content))
@@ -1146,7 +1199,7 @@ async def _handle_key_drop(message: discord.Message):
     await bot.process_commands(message)
 
 
-async def _handle_wallahi_message(message: discord.Message):
+async def _handle_wallahi_message(message):
     member = message.author
     g = message.guild.id
     if has_active_invinc(g, member.id):
@@ -1175,7 +1228,7 @@ async def _handle_wallahi_message(message: discord.Message):
     await message.channel.send(embed=e)
 
 
-async def _track_message_for_credits(message: discord.Message):
+async def _track_message_for_credits(message):
     if not isinstance(message.author, discord.Member):
         return
     g = message.guild.id
@@ -1198,7 +1251,7 @@ async def _track_message_for_credits(message: discord.Message):
             pass
 
 
-async def _run_automod(message: discord.Message) -> bool:
+async def _run_automod(message):
     if not AUTOMOD_ENABLED or not message.guild or message.author.bot:
         return False
     if not isinstance(message.author, discord.Member):
@@ -1238,9 +1291,7 @@ async def _run_automod(message: discord.Message) -> bool:
     if len(recent) >= SPAM_THRESHOLD:
         try:
             await message.channel.send(f"{message.author.mention} slow down!", delete_after=5)
-            await message.author.timeout(
-                datetime.now(timezone.utc) + timedelta(seconds=30),
-                reason="AutoMod: spamming")
+            await message.author.timeout(datetime.now(timezone.utc) + timedelta(seconds=30), reason="AutoMod: spamming")
         except discord.HTTPException:
             pass
         dq.clear()
@@ -1248,7 +1299,7 @@ async def _run_automod(message: discord.Message) -> bool:
     return False
 
 
-async def _remove_afk(message: discord.Message):
+async def _remove_afk(message):
     if not message.guild:
         return
     state = _load_guild_state(AFK_FILE, message.guild.id)
@@ -1263,7 +1314,7 @@ async def _remove_afk(message: discord.Message):
             pass
 
 
-async def _check_afk(message: discord.Message):
+async def _check_afk(message):
     if not message.guild or not message.mentions:
         return
     state = _load_guild_state(AFK_FILE, message.guild.id)
@@ -1280,18 +1331,17 @@ async def _check_afk(message: discord.Message):
                 pass
             break
 
-
 # =============================================================================
-# ============================ PREMIUM SYSTEM =================================
+# PREMIUM
 # =============================================================================
 
 async def panel_logic(target):
     e = embed("✨ Premium Panel ✨",
-        "Click below to claim your **Premium Key**.\n\n"
-        "> 🎁 Each key can be used **once**.\n"
-        "> 🔒 You need the required role.\n"
-        "> ⏳ Limited stock — restocked regularly.",
-        COLOR_PREMIUM)
+              "Click below to claim your **Premium Key**.\n\n"
+              "> 🎁 Each key can be used **once**.\n"
+              "> 🔒 You need the required role.\n"
+              "> ⏳ Limited stock — restocked regularly.",
+              COLOR_PREMIUM)
     e.set_footer(text="Premium System")
     if bot.user:
         e.set_thumbnail(url=bot.user.display_avatar.url)
@@ -1306,41 +1356,34 @@ class PremiumView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Get Premium Key", style=discord.ButtonStyle.success,
-                       emoji="🔑", custom_id="premium_get_key")
-    async def get_key(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Get Premium Key", style=discord.ButtonStyle.success, emoji="🔑", custom_id="premium_get_key")
+    async def get_key(self, interaction, button):
         member = interaction.user
         if not isinstance(member, discord.Member) or not has_any_role(member, REQUIRED_ROLES_FOR_PANEL):
-            await interaction.response.send_message(
-                embed=error_embed("No Access", "You don't have the required role."), ephemeral=True)
+            await interaction.response.send_message(embed=error_embed("No Access", "You don't have the required role."), ephemeral=True)
             return
         used = load_json(USED_FILE, [])
         if any(e.get("user_id") == member.id for e in used):
-            await interaction.response.send_message(
-                embed=warning_embed("Already Claimed", "You already claimed a premium key."), ephemeral=True)
+            await interaction.response.send_message(embed=warning_embed("Already Claimed", "You already claimed a premium key."), ephemeral=True)
             return
         keys = load_json(KEYS_FILE, [])
         if not keys:
-            await interaction.response.send_message(
-                embed=error_embed("Out of Stock", "No keys available right now."), ephemeral=True)
+            await interaction.response.send_message(embed=error_embed("Out of Stock", "No keys available right now."), ephemeral=True)
             return
         key = keys.pop(0)
         save_json(KEYS_FILE, keys)
-        used.append({"key": key, "user_id": member.id,
-                     "claimed_at": datetime.now(timezone.utc).isoformat()})
+        used.append({"key": key, "user_id": member.id, "claimed_at": datetime.now(timezone.utc).isoformat()})
         save_json(USED_FILE, used)
         try:
             e = embed("🔑 Your Premium Key", f"```{key}```\nKeep this safe — single use only.", COLOR_SUCCESS)
             await member.send(embed=e)
-            await interaction.response.send_message(
-                embed=success_embed("Key Sent", "Check your DMs!"), ephemeral=True)
+            await interaction.response.send_message(embed=success_embed("Key Sent", "Check your DMs!"), ephemeral=True)
         except discord.Forbidden:
             keys.insert(0, key)
             save_json(KEYS_FILE, keys)
             used = [x for x in used if x.get("key") != key]
             save_json(USED_FILE, used)
-            await interaction.response.send_message(
-                embed=error_embed("DM Failed", "Enable DMs from server members."), ephemeral=True)
+            await interaction.response.send_message(embed=error_embed("DM Failed", "Enable DMs from server members."), ephemeral=True)
 
 
 async def restock_logic(target, key_string):
@@ -1445,9 +1488,8 @@ async def stock_logic(target):
     else:
         await target.send(embed=e)
 
-
 # =============================================================================
-# ============================ TICKET SYSTEM ==================================
+# TICKETS
 # =============================================================================
 
 def _tkey(cid): return str(cid)
@@ -1460,8 +1502,8 @@ def build_ticket_embed(data):
     added = data.get("added_users", [])
     priority = data.get("priority", "Normal")
     e = embed("🎫 Support Ticket",
-        f"Welcome <@{opener}>!\nDescribe your issue below.\n\n**Staff will assist you shortly.**",
-        COLOR_PRIMARY)
+              f"Welcome <@{opener}>!\nDescribe your issue below.\n\n**Staff will assist you shortly.**",
+              COLOR_PRIMARY)
     e.add_field(name="Opened by", value=f"<@{opener}>", inline=True)
     e.add_field(name="Claimed by", value=f"<@{claimed}>" if claimed else "`Unclaimed`", inline=True)
     e.add_field(name="Priority", value=priority, inline=True)
@@ -1478,8 +1520,7 @@ async def apply_claim_perms(channel, data):
     claimed = data.get("claimed_by")
     added = data.get("added_users", [])
     if staff_role:
-        await channel.set_permissions(staff_role, view_channel=True,
-            send_messages=not bool(claimed), read_message_history=True)
+        await channel.set_permissions(staff_role, view_channel=True, send_messages=not bool(claimed), read_message_history=True)
     if opener_id and (op := g.get_member(opener_id)):
         await channel.set_permissions(op, view_channel=True, send_messages=True, read_message_history=True)
     for uid in added:
@@ -1517,11 +1558,11 @@ async def ticket_setup(target):
             await target.reply(embed=e)
         return
     e = embed("🎫 Support Tickets",
-        "Click below to open a private ticket.\n\n"
-        "> 📩 A private channel will be created.\n"
-        "> 🤝 Staff will assist you.\n"
-        "> 🔒 Only you and staff can see it.",
-        COLOR_PRIMARY)
+              "Click below to open a private ticket.\n\n"
+              "> 📩 A private channel will be created.\n"
+              "> 🤝 Staff will assist you.\n"
+              "> 🔒 Only you and staff can see it.",
+              COLOR_PRIMARY)
     e.set_footer(text="Click to open a ticket")
     view = TicketOpenView()
     if isinstance(target, discord.Interaction):
@@ -1534,9 +1575,8 @@ class TicketOpenView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Open Ticket", style=discord.ButtonStyle.primary,
-                       emoji="🎫", custom_id="ticket_open")
-    async def open_ticket(self, interaction: discord.Interaction, _btn):
+    @discord.ui.button(label="Open Ticket", style=discord.ButtonStyle.primary, emoji="🎫", custom_id="ticket_open")
+    async def open_ticket(self, interaction, _btn):
         g = interaction.guild
         member = interaction.user
         if not g:
@@ -1545,8 +1585,7 @@ class TicketOpenView(discord.ui.View):
         tickets = load_json(TICKETS_FILE, {})
         for cid, d in tickets.items():
             if d.get("opener_id") == member.id and d.get("status") == "open":
-                await interaction.response.send_message(
-                    embed=warning_embed("Already Open", f"You have an open ticket: <#{cid}>"), ephemeral=True)
+                await interaction.response.send_message(embed=warning_embed("Already Open", f"You have an open ticket: <#{cid}>"), ephemeral=True)
                 return
         cat = g.get_channel(TICKET_CATEGORY_ID)
         if not isinstance(cat, discord.CategoryChannel):
@@ -1554,42 +1593,37 @@ class TicketOpenView(discord.ui.View):
         ow = {
             g.default_role: discord.PermissionOverwrite(view_channel=False),
             member: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-            g.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
-        }
+            g.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)}
         staff = g.get_role(TICKET_STAFF_ROLE_ID)
         if staff:
             ow[staff] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
         try:
-            ch = await g.create_text_channel(
-                name=f"ticket-{member.name}".lower()[:90],
-                overwrites=ow, category=cat,
-                topic=f"Ticket by {member} ({member.id})",
-            )
+            ch = await g.create_text_channel(name=f"ticket-{member.name}".lower()[:90], overwrites=ow, category=cat,
+                                             topic=f"Ticket by {member} ({member.id})")
         except discord.Forbidden:
             await interaction.response.send_message(embed=error_embed("Failed", "I can't create channels."), ephemeral=True)
             return
-        tickets[_tkey(ch.id)] = {
-            "opener_id": member.id, "claimed_by": None, "added_users": [],
-            "status": "open", "priority": "Normal",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
+        tickets[_tkey(ch.id)] = {"opener_id": member.id, "claimed_by": None, "added_users": [],
+                                 "status": "open", "priority": "Normal",
+                                 "created_at": datetime.now(timezone.utc).isoformat()}
         save_json(TICKETS_FILE, tickets)
         e = build_ticket_embed(tickets[_tkey(ch.id)])
         try:
             await ch.send(content=f"{member.mention} {staff.mention if staff else ''}", embed=e, view=TicketControlView())
         except discord.HTTPException:
             await ch.send(embed=e, view=TicketControlView())
-        await interaction.response.send_message(
-            embed=success_embed("Ticket Created", f"Your ticket: {ch.mention}"), ephemeral=True)
+        await interaction.response.send_message(embed=success_embed("Ticket Created", f"Your ticket: {ch.mention}"), ephemeral=True)
 
 
 class TicketControlView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
+    def __init__(self):
+        super().__init__(timeout=None)
 
     async def _refresh(self, interaction):
         tickets = load_json(TICKETS_FILE, {})
         d = tickets.get(_tkey(interaction.channel.id))
-        if not d: return None
+        if not d:
+            return None
         try:
             await interaction.message.edit(embed=build_ticket_embed(d), view=self)
         except (discord.HTTPException, AttributeError):
@@ -1597,7 +1631,7 @@ class TicketControlView(discord.ui.View):
         return d
 
     @discord.ui.button(label="Claim", style=discord.ButtonStyle.success, emoji="🙋", custom_id="ticket_claim")
-    async def claim(self, interaction: discord.Interaction, _b):
+    async def claim(self, interaction, _b):
         mem = interaction.user
         if not isinstance(mem, discord.Member) or not _is_ticket_staff(mem):
             await interaction.response.send_message(embed=error_embed("No Access", "Staff only."), ephemeral=True)
@@ -1619,7 +1653,7 @@ class TicketControlView(discord.ui.View):
         await self._refresh(interaction)
 
     @discord.ui.button(label="Unclaim", style=discord.ButtonStyle.secondary, emoji="↩️", custom_id="ticket_unclaim")
-    async def unclaim(self, interaction: discord.Interaction, _b):
+    async def unclaim(self, interaction, _b):
         mem = interaction.user
         if not isinstance(mem, discord.Member) or not _is_ticket_staff(mem):
             await interaction.response.send_message(embed=error_embed("No Access", "Staff only."), ephemeral=True)
@@ -1641,7 +1675,7 @@ class TicketControlView(discord.ui.View):
         await self._refresh(interaction)
 
     @discord.ui.button(label="Add User", style=discord.ButtonStyle.primary, emoji="➕", custom_id="ticket_add")
-    async def add_user(self, interaction: discord.Interaction, _b):
+    async def add_user(self, interaction, _b):
         tickets = load_json(TICKETS_FILE, {})
         d = tickets.get(_tkey(interaction.channel.id))
         if not d:
@@ -1660,21 +1694,21 @@ class TicketControlView(discord.ui.View):
         await interaction.response.send_modal(AddUserModal())
 
     @discord.ui.button(label="Remove User", style=discord.ButtonStyle.primary, emoji="➖", custom_id="ticket_remove")
-    async def remove_user(self, interaction: discord.Interaction, _b):
+    async def remove_user(self, interaction, _b):
         if not isinstance(interaction.user, discord.Member) or not _is_ticket_staff(interaction.user):
             await interaction.response.send_message(embed=error_embed("No Access", "Staff only."), ephemeral=True)
             return
         await interaction.response.send_modal(RemoveUserModal())
 
     @discord.ui.button(label="Priority", style=discord.ButtonStyle.primary, emoji="⚡", custom_id="ticket_priority")
-    async def priority(self, interaction: discord.Interaction, _b):
+    async def priority(self, interaction, _b):
         if not isinstance(interaction.user, discord.Member) or not _is_ticket_staff(interaction.user):
             await interaction.response.send_message(embed=error_embed("No Access", "Staff only."), ephemeral=True)
             return
         await interaction.response.send_message(view=PriorityView(), ephemeral=True)
 
     @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close")
-    async def close(self, interaction: discord.Interaction, _b):
+    async def close(self, interaction, _b):
         tickets = load_json(TICKETS_FILE, {})
         k = _tkey(interaction.channel.id)
         d = tickets.get(k)
@@ -1715,8 +1749,8 @@ class TicketControlView(discord.ui.View):
             try:
                 op = await bot.fetch_user(opener_id)
                 e = embed("📝 Ticket Feedback",
-                    "Your ticket closed.\nReply to this DM with a rating (1-5) or comments.",
-                    COLOR_GOLD)
+                          "Your ticket closed.\nReply to this DM with a rating (1-5) or comments.",
+                          COLOR_GOLD)
                 await op.send(embed=e)
             except (discord.Forbidden, discord.NotFound, discord.HTTPException):
                 pass
@@ -1729,7 +1763,8 @@ class TicketControlView(discord.ui.View):
 
 
 class PriorityView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=60)
+    def __init__(self):
+        super().__init__(timeout=60)
 
     async def _set(self, interaction, level):
         tickets = load_json(TICKETS_FILE, {})
@@ -1752,10 +1787,13 @@ class PriorityView(discord.ui.View):
 
     @discord.ui.button(label="Low", style=discord.ButtonStyle.secondary)
     async def low(self, i, _b): await self._set(i, "Low")
+
     @discord.ui.button(label="Normal", style=discord.ButtonStyle.primary)
     async def normal(self, i, _b): await self._set(i, "Normal")
+
     @discord.ui.button(label="High", style=discord.ButtonStyle.danger)
     async def high(self, i, _b): await self._set(i, "High")
+
     @discord.ui.button(label="Urgent", style=discord.ButtonStyle.danger, emoji="🚨")
     async def urgent(self, i, _b): await self._set(i, "Urgent")
 
@@ -1763,7 +1801,7 @@ class PriorityView(discord.ui.View):
 class AddUserModal(discord.ui.Modal, title="Add User to Ticket"):
     uid = discord.ui.TextInput(label="User ID", placeholder="Paste user ID", required=True, max_length=25)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction):
         tickets = load_json(TICKETS_FILE, {})
         k = _tkey(interaction.channel.id)
         d = tickets.get(k)
@@ -1812,7 +1850,7 @@ class AddUserModal(discord.ui.Modal, title="Add User to Ticket"):
 class RemoveUserModal(discord.ui.Modal, title="Remove User from Ticket"):
     uid = discord.ui.TextInput(label="User ID", placeholder="Paste user ID", required=True, max_length=25)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction):
         tickets = load_json(TICKETS_FILE, {})
         k = _tkey(interaction.channel.id)
         d = tickets.get(k)
@@ -1852,9 +1890,8 @@ class RemoveUserModal(discord.ui.Modal, title="Remove User from Ticket"):
         except discord.HTTPException:
             pass
 
-
 # =============================================================================
-# =========================== MODERATION COMMANDS =============================
+# MODERATION
 # =============================================================================
 
 async def _check_mod(ctx):
@@ -1865,8 +1902,7 @@ async def _check_mod(ctx):
 
 
 async def _send_mod_dm(member, action, mod, reason, length):
-    e = embed(f"Server Moderation: {action}",
-        f"You were {action.lower()} in **{member.guild.name}**.", COLOR_WARNING)
+    e = embed(f"Server Moderation: {action}", f"You were {action.lower()} in **{member.guild.name}**.", COLOR_WARNING)
     e.add_field(name="Reason", value=(reason or "None")[:1024])
     e.add_field(name="Length", value=length[:1024])
     e.add_field(name="Moderator", value=str(mod)[:1024])
@@ -1889,9 +1925,8 @@ async def _reply_result(ctx, title, desc, reason, dm_sent, color=COLOR_SUCCESS):
 async def warn_cmd(ctx, member: discord.Member, *, reason="No reason"):
     if not await _check_mod(ctx): return
     warns = load_json(WARNINGS_FILE, [])
-    warns.append({"guild_id": ctx.guild.id, "user_id": member.id,
-                  "moderator_id": ctx.author.id, "reason": reason,
-                  "created_at": datetime.now(timezone.utc).isoformat()})
+    warns.append({"guild_id": ctx.guild.id, "user_id": member.id, "moderator_id": ctx.author.id,
+                  "reason": reason, "created_at": datetime.now(timezone.utc).isoformat()})
     save_json(WARNINGS_FILE, warns)
     count = sum(1 for w in warns if w.get("guild_id") == ctx.guild.id and w.get("user_id") == member.id)
     dm = await _send_mod_dm(member, "Warned", ctx.author, reason, "N/A")
@@ -2058,9 +2093,8 @@ async def invinc_cmd(ctx, member: discord.Member, length: str, *, reason: str):
     e.add_field(name="Expires", value=discord.utils.format_dt(expires, "R"))
     await ctx.reply(embed=e)
 
-
 # =============================================================================
-# ============================ ECONOMY SYSTEM =================================
+# ECONOMY
 # =============================================================================
 
 def _get_cd(guild_id, user_id, key):
@@ -2195,7 +2229,7 @@ async def leaderboard_cmd(ctx):
     sorted_users = sorted(((int(k), v) for k, v in gs.items() if isinstance(v, int)), key=lambda x: x[1], reverse=True)[:10]
     e = embed("🏆 Credit Leaderboard", color=COLOR_GOLD)
     for i, (uid, bal) in enumerate(sorted_users, 1):
-        medal = ["🥇", "🥈", "🥉"][i-1] if i <= 3 else f"#{i}"
+        medal = ["🥇", "🥈", "🥉"][i - 1] if i <= 3 else f"#{i}"
         e.add_field(name=f"{medal} <@{uid}>", value=f"**{bal:,}** credits", inline=False)
     if not sorted_users:
         e.description = "No data yet."
@@ -2206,9 +2240,7 @@ async def leaderboard_cmd(ctx):
 @commands.guild_only()
 async def buy_cmd(ctx):
     bal = get_credit_balance(ctx.guild.id, ctx.author.id)
-    e = embed("🛒 Shop",
-        "• **Premium role:** 150 credits\n• **Wallahis:** 1 credit each",
-        COLOR_GOLD)
+    e = embed("🛒 Shop", "• **Premium role:** 150 credits\n• **Wallahis:** 1 credit each", COLOR_GOLD)
     e.add_field(name="Your Credits", value="∞" if is_jew_mode(ctx.author) else f"{bal:,}")
     view = BuyMenuView(ctx.guild, ctx.author)
     view.message = await ctx.reply(embed=e, view=view)
@@ -2238,7 +2270,7 @@ class BuyWallahiModal(discord.ui.Modal, title="Buy Wallahis"):
         self.guild = guild
         self.member = member
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction):
         if not str(self.amount.value).isdecimal():
             await interaction.response.send_message(embed=error_embed("Invalid", "Whole number."), ephemeral=True)
             return
@@ -2255,8 +2287,7 @@ class BuyWallahiModal(discord.ui.Modal, title="Buy Wallahis"):
             add_credit_balance(self.guild.id, self.member.id, -amt)
         total = get_wallahi_count(self.guild.id, self.member.id) + amt
         set_wallahi_count(self.guild.id, self.member.id, total)
-        await interaction.response.send_message(
-            embed=success_embed("Purchased", f"Bought **{amt}** Wallahis. Total: **{total}**"), ephemeral=True)
+        await interaction.response.send_message(embed=success_embed("Purchased", f"Bought **{amt}** Wallahis. Total: **{total}**"), ephemeral=True)
 
 
 class BuyMenuView(discord.ui.View):
@@ -2299,9 +2330,8 @@ class BuyMenuView(discord.ui.View):
     async def buy_wallahis(self, interaction, _b):
         await interaction.response.send_modal(BuyWallahiModal(self.guild, self.member))
 
-
 # =============================================================================
-# ============================ GIVEAWAY SYSTEM ================================
+# GIVEAWAYS
 # =============================================================================
 
 class GiveawayView(discord.ui.View):
@@ -2309,9 +2339,8 @@ class GiveawayView(discord.ui.View):
         super().__init__(timeout=None)
         self.gid = gid
 
-    @discord.ui.button(label="Enter", style=discord.ButtonStyle.success,
-                       emoji="🎉", custom_id="giveaway_enter")
-    async def enter(self, interaction: discord.Interaction, _b):
+    @discord.ui.button(label="Enter", style=discord.ButtonStyle.success, emoji="🎉", custom_id="giveaway_enter")
+    async def enter(self, interaction, _b):
         data = load_json(GIVEAWAYS_FILE, {})
         g = data.get(self.gid)
         if not g or g.get("ended"):
@@ -2335,7 +2364,7 @@ async def gstart_cmd(ctx, duration: str, winners: int, *, prize: str):
     try:
         amt = int(duration[:-1])
         unit = duration[-1].lower()
-        secs = amt * {"s":1, "m":60, "h":3600, "d":86400}[unit]
+        secs = amt * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
     except Exception:
         await ctx.reply(embed=error_embed("Bad Duration", "Use `10m`, `1h`, `1d`."))
         return
@@ -2350,20 +2379,17 @@ async def gstart_cmd(ctx, duration: str, winners: int, *, prize: str):
     view = GiveawayView(gid)
     await msg.edit(view=view)
     data = load_json(GIVEAWAYS_FILE, {})
-    data[gid] = {
-        "channel_id": ctx.channel.id, "message_id": msg.id,
-        "prize": prize, "winners": winners, "ends_at": ends_at.isoformat(),
-        "entries": [], "host_id": ctx.author.id, "ended": False,
-    }
+    data[gid] = {"channel_id": ctx.channel.id, "message_id": msg.id, "prize": prize,
+                 "winners": winners, "ends_at": ends_at.isoformat(), "entries": [],
+                 "host_id": ctx.author.id, "ended": False}
     save_json(GIVEAWAYS_FILE, data)
 
-
 # =============================================================================
-# ========================== REACTION ROLES ===================================
+# REACTION ROLES
 # =============================================================================
 
 class RRPersistentView(discord.ui.View):
-    def __init__(self, guild_id: int, message_id: int, roles: list):
+    def __init__(self, guild_id, message_id, roles):
         super().__init__(timeout=None)
         self.guild_id = guild_id
         self.message_id = message_id
@@ -2371,17 +2397,14 @@ class RRPersistentView(discord.ui.View):
             emoji = entry.get("emoji")
             rid = entry["role_id"]
             label = entry.get("label") or f"Role {rid}"
-            btn = discord.ui.Button(
-                label=label[:80],
-                emoji=emoji if emoji else None,
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"rr:{guild_id}:{message_id}:{rid}",
-            )
+            btn = discord.ui.Button(label=label[:80], emoji=emoji if emoji else None,
+                                    style=discord.ButtonStyle.secondary,
+                                    custom_id=f"rr:{guild_id}:{message_id}:{rid}")
             btn.callback = self._make_cb(rid)
             self.add_item(btn)
 
-    def _make_cb(self, role_id: int):
-        async def cb(interaction: discord.Interaction):
+    def _make_cb(self, role_id):
+        async def cb(interaction):
             role = interaction.guild.get_role(role_id)
             if not role:
                 await interaction.response.send_message(embed=error_embed("Role Missing", ""), ephemeral=True)
@@ -2405,18 +2428,15 @@ async def rr_cmd(ctx, message_id: int, role: discord.Role, emoji: str = "✅", *
         await ctx.reply(embed=error_embed("Message Not Found", ""))
         return
     data = load_json(RR_FILE, {})
-    entry = data.setdefault(str(message_id), {
-        "guild_id": ctx.guild.id, "channel_id": ctx.channel.id, "roles": []
-    })
+    entry = data.setdefault(str(message_id), {"guild_id": ctx.guild.id, "channel_id": ctx.channel.id, "roles": []})
     entry["roles"].append({"role_id": role.id, "emoji": emoji, "label": label or role.name})
     save_json(RR_FILE, data)
     view = RRPersistentView(ctx.guild.id, message_id, entry["roles"])
     await msg.edit(view=view)
     await ctx.reply(embed=success_embed("Reaction Role Added", f"Added {role.mention} with {emoji}"))
 
-
 # =============================================================================
-# ============================ UTILITY COMMANDS ===============================
+# UTILITY
 # =============================================================================
 
 @bot.command(name="ping")
@@ -2546,7 +2566,7 @@ async def poll_cmd(ctx, question: str, *options):
         await ctx.reply(embed=error_embed("Too Many", "Max 10 options."))
         return
     e = embed("📊 " + question, color=COLOR_PRIMARY)
-    emojis = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
+    emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
     for i, opt in enumerate(options):
         e.add_field(name=emojis[i], value=opt, inline=False)
     msg = await ctx.send(embed=e)
@@ -2557,14 +2577,15 @@ async def poll_cmd(ctx, question: str, *options):
 @bot.command(name="remind")
 async def remind_cmd(ctx, duration: str, *, text: str):
     try:
-        secs = int(duration[:-1]) * {"s":1, "m":60, "h":3600, "d":86400}[duration[-1].lower()]
+        secs = int(duration[:-1]) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[duration[-1].lower()]
     except Exception:
         await ctx.reply(embed=error_embed("Bad Duration", "Use `10m`, `1h`."))
         return
-    if secs < 1 or secs > 7*86400:
+    if secs < 1 or secs > 7 * 86400:
         await ctx.reply(embed=error_embed("Invalid", "1s - 7d."))
         return
     await ctx.reply(embed=success_embed("⏰ Reminder Set", f"I'll remind you in **{duration}**."))
+
     async def _r():
         await asyncio.sleep(secs)
         try:
@@ -2582,16 +2603,12 @@ async def remind_cmd(ctx, duration: str, *, text: str):
 @commands.guild_only()
 async def afk_cmd(ctx, *, reason="AFK"):
     state = _load_guild_state(AFK_FILE, ctx.guild.id)
-    state[str(ctx.guild.id)][str(ctx.author.id)] = {
-        "reason": reason[:200],
-        "since": datetime.now(timezone.utc).isoformat(),
-    }
+    state[str(ctx.guild.id)][str(ctx.author.id)] = {"reason": reason[:200], "since": datetime.now(timezone.utc).isoformat()}
     save_json(AFK_FILE, state)
     await ctx.reply(embed=success_embed("💤 AFK Set", f"You're now AFK: **{reason[:200]}**"))
 
-
 # =============================================================================
-# ============================ SLASH COMMANDS =================================
+# SLASH COMMANDS
 # =============================================================================
 
 @bot.tree.command(name="premiumpanel", description="Show the premium key panel")
@@ -2623,7 +2640,7 @@ async def ticket_slash(interaction: discord.Interaction):
 
 @bot.tree.command(name="ping", description="Bot latency")
 async def ping_slash(interaction: discord.Interaction):
-    await interaction.response.send_message(embed=embed("🏓 Pong!", f"Latency: `{round(bot.latency*1000)}ms`"))
+    await interaction.response.send_message(embed=embed("🏓 Pong!", f"Latency: `{round(bot.latency * 1000)}ms`"))
 
 
 @bot.tree.command(name="balance", description="Check your balance")
@@ -2728,9 +2745,8 @@ async def botinfo_slash(interaction: discord.Interaction):
         e.set_thumbnail(url=bot.user.display_avatar.url)
     await interaction.response.send_message(embed=e)
 
-
 # =============================================================================
-# ============================ PREFIX VERSIONS ================================
+# PREFIX COMMANDS (non-overlapping with existing)
 # =============================================================================
 
 @bot.command(name="premiumpanel")
@@ -2776,19 +2792,6 @@ async def loadserver_prefix(ctx):
     await loadserver_logic(ctx)
 
 
-@bot.command(name="balance", aliases=["bal2"])
-@commands.guild_only()
-async def balance_prefix(ctx, member: discord.Member = None):
-    target = member or ctx.author
-    bal = get_credit_balance(ctx.guild.id, target.id)
-    bal_text = "∞ (Jew Mode)" if is_jew_mode(target) else f"{bal:,}"
-    e = embed(f"💳 {target.display_name}'s Balance", color=COLOR_GOLD)
-    e.add_field(name="Credits", value=bal_text)
-    e.add_field(name="Wallahis", value=str(get_wallahi_count(ctx.guild.id, target.id)))
-    e.set_thumbnail(url=target.display_avatar.url)
-    await ctx.reply(embed=e)
-
-
 @bot.command(name="botinfo")
 async def botinfo_prefix(ctx):
     e = embed("🤖 Bot Info", color=COLOR_PRIMARY)
@@ -2800,9 +2803,8 @@ async def botinfo_prefix(ctx):
         e.set_thumbnail(url=bot.user.display_avatar.url)
     await ctx.reply(embed=e)
 
-
 # =============================================================================
-# ============================ WEB SERVER =====================================
+# WEB SERVER
 # =============================================================================
 
 async def _run_web_server():
@@ -2819,8 +2821,7 @@ async def _run_web_server():
             "status": "ok",
             "bot": str(bot.user) if bot.user else "starting",
             "guilds": len(bot.guilds),
-            "uptime": str(datetime.now(timezone.utc) - bot.start_time),
-        })
+            "uptime": str(datetime.now(timezone.utc) - bot.start_time)})
 
     async def root(request):
         return web.Response(text="Premium Bot is running 🚀")
@@ -2834,9 +2835,8 @@ async def _run_web_server():
     await site.start()
     log.info(f"Web server listening on port {PORT}")
 
-
 # =============================================================================
-# ============================== MAIN =========================================
+# MAIN
 # =============================================================================
 
 async def main():
