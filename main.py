@@ -1,6 +1,6 @@
 """
 🚀 PREMIUM DISCORD BOT - Single File Edition
-Railway-ready. Just add DISCORD_TOKEN to env vars and deploy.
+Railway-ready. Add DISCORD_TOKEN to env vars and deploy.
 """
 
 import asyncio
@@ -38,13 +38,19 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 TRANSCRIPT_DIR = os.path.join(DATA_DIR, "transcripts")
 os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
+os.makedirs(BACKUP_DIR, exist_ok=True)
 
 
 def data_path(name: str) -> str:
     return os.path.join(DATA_DIR, name)
 
 
-# ---------- Role IDs (EDIT THESE TO MATCH YOUR SERVER) ----------
+def backup_path(guild_id: int) -> str:
+    return os.path.join(BACKUP_DIR, f"{guild_id}.json")
+
+
+# ---------- Role IDs (EDIT THESE) ----------
 REQUIRED_ROLES_FOR_PANEL = [1535650014565507225, 1535650018621394944]
 RESTOCK_ROLE_ID = 1535650003975147540
 DM_ROLE_ID = 1555668778635886685
@@ -56,27 +62,14 @@ KEY_DROP_CHANNEL_ID = 1535650094442090557
 PREMIUM_ROLE_ID = 1535650014565507225
 JEW_MODE_ROLE_ID = 1558065787351204033
 
-# ---------- Channels ----------
-WELCOME_CHANNEL_ID = int(os.getenv("WELCOME_CHANNEL_ID", "0")) or None
-GOODBYE_CHANNEL_ID = int(os.getenv("GOODBYE_CHANNEL_ID", "0")) or None
 LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID", "0")) or None
-LEVEL_UP_CHANNEL_ID = int(os.getenv("LEVEL_UP_CHANNEL_ID", "0")) or None
 
 # ---------- Economy ----------
 MESSAGES_PER_CREDIT = 150
-DAILY_REWARD_MIN = 50
-DAILY_REWARD_MAX = 150
-WORK_COOLDOWN = 3600
-WORK_MIN = 20
-WORK_MAX = 80
+DAILY_REWARD = 5
 ROB_COOLDOWN = 7200
 ROB_SUCCESS_RATE = 0.4
 ROB_MAX_STEAL = 500
-
-# ---------- Leveling ----------
-XP_PER_MESSAGE_MIN = 5
-XP_PER_MESSAGE_MAX = 15
-XP_COOLDOWN = 60
 
 # ---------- Automod ----------
 AUTOMOD_ENABLED = True
@@ -84,21 +77,31 @@ SPAM_THRESHOLD = 5
 SPAM_INTERVAL = 5
 MAX_MENTIONS = 5
 MAX_CAPS_PERCENT = 70
-BAD_WORDS = []  # add words here if you want
+BAD_WORDS = []
+
+# ---------- Anti-Nuke ----------
+ANTINUKE_ENABLED = True
+ANTINUKE_CHANNEL_DELETE_THRESHOLD = 2     # how many deletions...
+ANTINUKE_CHANNEL_DELETE_WINDOW = 5        # ...within this many seconds → ban
+ANTINUKE_CHANNEL_CREATE_THRESHOLD = 5     # mass channel creation
+ANTINUKE_CHANNEL_CREATE_WINDOW = 10
+ANTINUKE_ROLE_DELETE_THRESHOLD = 2
+ANTINUKE_ROLE_DELETE_WINDOW = 5
+ANTINUKE_BAN_THRESHOLD = 3                # mass bans
+ANTINUKE_BAN_WINDOW = 10
+ANTINUKE_KICK_THRESHOLD = 3               # mass kicks
+ANTINUKE_KICK_WINDOW = 10
 
 # ---------- Ticket ----------
 DEFAULT_DM_AMOUNT = 1
 DEFAULT_DM_REASON = "Invalid reason"
 MAX_TXT_FILE_SIZE = 5 * 1024 * 1024
 
-# ---------- Bot ----------
 COMMAND_PREFIXES = ["!", "a!"]
 
-# ---------- Web server (Railway) ----------
 PORT = int(os.getenv("PORT", "8080"))
 ENABLE_WEB_SERVER = os.getenv("ENABLE_WEB_SERVER", "true").lower() == "true"
 
-# ---------- Colors ----------
 COLOR_PRIMARY = 0x5865F2
 COLOR_SUCCESS = 0x57F287
 COLOR_WARNING = 0xFEE75C
@@ -130,7 +133,6 @@ WALLAHIS_FILE = data_path("wallahis.json")
 INVINC_FILE = data_path("invinc.json")
 CREDITS_FILE = data_path("credits.json")
 MESSAGE_COUNTS_FILE = data_path("message_counts.json")
-LEVELS_FILE = data_path("levels.json")
 AFK_FILE = data_path("afk.json")
 GIVEAWAYS_FILE = data_path("giveaways.json")
 RR_FILE = data_path("reaction_roles.json")
@@ -139,15 +141,6 @@ COOLDOWNS_FILE = data_path("cooldowns.json")
 # =============================================================================
 # ============================ SAFE JSON I/O ==================================
 # =============================================================================
-
-_file_locks: dict[str, asyncio.Lock] = {}
-
-
-def _get_lock(path: str) -> asyncio.Lock:
-    if path not in _file_locks:
-        _file_locks[path] = asyncio.Lock()
-    return _file_locks[path]
-
 
 def load_json(path: str, default: Any) -> Any:
     if not os.path.exists(path):
@@ -321,20 +314,22 @@ class PremiumBot(commands.Bot):
         self.start_time = datetime.now(timezone.utc)
         self.snipe_cache: dict[int, dict] = {}
         self.edit_snipe_cache: dict[int, dict] = {}
-        self.xp_cooldowns: dict[tuple[int, int], float] = {}
         self.spam_tracker = defaultdict(lambda: deque(maxlen=10))
+        # Antinuke trackers: guild_id -> deque of (timestamp, actor_id)
+        self.an_channel_delete = defaultdict(lambda: deque(maxlen=20))
+        self.an_channel_create = defaultdict(lambda: deque(maxlen=20))
+        self.an_role_delete = defaultdict(lambda: deque(maxlen=20))
+        self.an_ban = defaultdict(lambda: deque(maxlen=20))
+        self.an_kick = defaultdict(lambda: deque(maxlen=20))
+        # Track who invited which bot: bot_id -> inviter_id
+        self.bot_inviters: dict[int, int] = {}
 
     async def setup_hook(self):
-        # Register persistent views
         self.add_view(PremiumView())
         self.add_view(TicketOpenView())
         self.add_view(TicketControlView())
         self._restore_rr_views()
-
-        # Start background tasks
         self.check_giveaways.start()
-
-        # Sync slash commands
         try:
             synced = await self.tree.sync()
             log.info(f"Synced {len(synced)} global slash commands")
@@ -345,8 +340,7 @@ class PremiumBot(commands.Bot):
         data = load_json(RR_FILE, {})
         for mid, info in data.items():
             try:
-                roles = info.get("roles", [])
-                view = RRPersistentView(info["guild_id"], int(mid), roles)
+                view = RRPersistentView(info["guild_id"], int(mid), info.get("roles", []))
                 self.add_view(view)
             except Exception as e:
                 log.error(f"RR restore failed: {e}")
@@ -354,6 +348,13 @@ class PremiumBot(commands.Bot):
     async def on_ready(self):
         log.info(f"Logged in as {self.user} (ID: {self.user.id})")
         log.info(f"Guilds: {len(self.guilds)} | Users: {sum(g.member_count or 0 for g in self.guilds)}")
+        # Cache bot inviters
+        for guild in self.guilds:
+            try:
+                async for entry in guild.audit_logs(limit=100, action=discord.AuditLogAction.bot_add):
+                    self.bot_inviters[entry.target.id] = entry.user.id
+            except (discord.Forbidden, discord.HTTPException):
+                pass
         try:
             await self.change_presence(
                 activity=discord.Activity(
@@ -407,6 +408,350 @@ class PremiumBot(commands.Bot):
 bot = PremiumBot()
 
 # =============================================================================
+# =========================== SERVER BACKUP ===================================
+# =============================================================================
+
+def _serialize_overwrites(channel: discord.abc.GuildChannel) -> dict:
+    """Serialize channel permission overwrites to a JSON-safe dict."""
+    out = {}
+    for target, ow in channel.overwrites.items():
+        allow, deny = ow.pair()
+        # Target is Role or Member
+        if isinstance(target, discord.Role):
+            key = f"role:{target.id}"
+        elif isinstance(target, discord.Member):
+            key = f"member:{target.id}"
+        else:
+            continue
+        out[key] = {
+            "allow": allow.value,
+            "deny": deny.value,
+        }
+    return out
+
+
+def serialize_guild(guild: discord.Guild) -> dict:
+    """Snapshot everything important about a guild."""
+    data = {
+        "guild_id": guild.id,
+        "guild_name": guild.name,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+        "icon_url": guild.icon.url if guild.icon else None,
+        "roles": [],
+        "categories": [],
+        "channels": [],
+    }
+
+    # Roles
+    for role in guild.roles:
+        if role.is_default():
+            continue  # skip @everyone
+        if role.managed:
+            continue  # bot-managed roles can't be re-created
+        data["roles"].append({
+            "id": role.id,
+            "name": role.name,
+            "color": role.color.value,
+            "hoist": role.hoist,
+            "mentionable": role.mentionable,
+            "permissions": role.permissions.value,
+            "position": role.position,
+            "is_bot_managed": role.managed,
+        })
+
+    # Categories
+    for cat in guild.categories:
+        data["categories"].append({
+            "id": cat.id,
+            "name": cat.name,
+            "position": cat.position,
+            "overwrites": _serialize_overwrites(cat),
+        })
+
+    # Channels
+    for ch in guild.channels:
+        if isinstance(ch, discord.CategoryChannel):
+            continue
+        entry = {
+            "id": ch.id,
+            "name": ch.name,
+            "type": str(ch.type),
+            "position": ch.position,
+            "category_id": ch.category.id if ch.category else None,
+            "overwrites": _serialize_overwrites(ch),
+            "nsfw": getattr(ch, "nsfw", False),
+            "topic": getattr(ch, "topic", None),
+            "slowmode_delay": getattr(ch, "slowmode_delay", 0),
+            "bitrate": getattr(ch, "bitrate", None),
+            "user_limit": getattr(ch, "user_limit", None),
+        }
+        data["channels"].append(entry)
+
+    return data
+
+
+async def _get_guild_owner_id(guild: discord.Guild) -> Optional[int]:
+    if guild.owner_id:
+        return guild.owner_id
+    try:
+        g = await bot.fetch_guild(guild.id, with_counts=False)
+        return g.owner_id
+    except discord.HTTPException:
+        return None
+
+
+async def serversave_logic(interaction: discord.Interaction):
+    guild = interaction.guild
+    if not guild:
+        await interaction.response.send_message(embed=error_embed("Server Only", ""), ephemeral=True)
+        return
+
+    owner_id = await _get_guild_owner_id(guild)
+    if owner_id is None or interaction.user.id != owner_id:
+        await interaction.response.send_message(
+            embed=error_embed("Owner Only", "Only the server owner can save the server."),
+            ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        data = serialize_guild(guild)
+        save_json(backup_path(guild.id), data)
+        e = success_embed("Server Saved", "Backup created successfully.")
+        e.add_field(name="Guild", value=f"{guild.name} (`{guild.id}`)")
+        e.add_field(name="Roles", value=str(len(data["roles"])), inline=True)
+        e.add_field(name="Categories", value=str(len(data["categories"])), inline=True)
+        e.add_field(name="Channels", value=str(len(data["channels"])), inline=True)
+        e.set_footer(text="Use /loadserver to restore")
+        await interaction.followup.send(embed=e, ephemeral=True)
+    except Exception as ex:
+        log.exception(f"serversave failed: {ex}")
+        await interaction.followup.send(embed=error_embed("Save Failed", str(ex)[:1024]), ephemeral=True)
+
+
+def _overwrites_from_data(guild: discord.Guild, ow_data: dict) -> dict:
+    """Rebuild a Discord PermissionOverwrite dict from serialized data."""
+    result = {}
+    for key, payload in ow_data.items():
+        try:
+            kind, id_str = key.split(":", 1)
+            tid = int(id_str)
+        except (ValueError, IndexError):
+            continue
+        target = None
+        if kind == "role":
+            target = guild.get_role(tid)
+        elif kind == "member":
+            target = guild.get_member(tid)
+        if target is None:
+            continue
+        result[target] = discord.PermissionOverwrite.from_pair(
+            discord.Permissions(payload.get("allow", 0)),
+            discord.Permissions(payload.get("deny", 0)),
+        )
+    return result
+
+
+async def _loadserver_core(guild: discord.Guild, progress_msg: Optional[discord.Message] = None):
+    """Restore a guild from backup. Returns a report dict."""
+    path = backup_path(guild.id)
+    if not os.path.exists(path):
+        return None, "No backup found for this server."
+
+    data = load_json(path, None)
+    if not data:
+        return None, "Backup file is empty or corrupted."
+
+    report = {"roles_created": 0, "roles_failed": 0,
+              "categories_created": 0, "categories_failed": 0,
+              "channels_created": 0, "channels_failed": 0,
+              "channels_skipped": 0, "errors": []}
+
+    async def _update_progress(text: str):
+        if progress_msg:
+            try:
+                await progress_msg.edit(embed=embed("⏳ Restoring...", text, COLOR_WARNING))
+            except discord.HTTPException:
+                pass
+
+    # ---- 1. Restore ROLES ----
+    await _update_progress("Restoring roles...")
+    existing_roles_by_name = {r.name: r for r in guild.roles}
+    id_to_role: dict[int, discord.Role] = {}
+
+    # Sort by position ascending so hierarchy is preserved
+    for role_data in sorted(data.get("roles", []), key=lambda x: x.get("position", 0)):
+        old_id = role_data["id"]
+        name = role_data["name"]
+        # If role still exists (by name), map it
+        if name in existing_roles_by_name:
+            id_to_role[old_id] = existing_roles_by_name[name]
+            continue
+        try:
+            # Strip dangerous perms for safety — never grant administrator
+            perms_value = role_data.get("permissions", 0)
+            # Never grant administrator or manage_guild to restored roles
+            dangerous = (discord.Permissions.administrator.value |
+                         discord.Permissions.manage_guild.value |
+                         discord.Permissions.ban_members.value |
+                         discord.Permissions.kick_members.value |
+                         discord.Permissions.manage_roles.value |
+                         discord.Permissions.manage_channels.value)
+            perms_value &= ~dangerous
+            new_role = await guild.create_role(
+                name=name,
+                color=discord.Color(role_data.get("color", 0)),
+                hoist=role_data.get("hoist", False),
+                mentionable=role_data.get("mentionable", False),
+                permissions=discord.Permissions(perms_value),
+                reason="Server restore",
+            )
+            id_to_role[old_id] = new_role
+            report["roles_created"] += 1
+        except discord.HTTPException as e:
+            report["roles_failed"] += 1
+            report["errors"].append(f"Role '{name}': {e}")
+        await asyncio.sleep(0.3)
+
+    # ---- 2. Restore CATEGORIES ----
+    await _update_progress("Restoring categories...")
+    id_to_category: dict[int, discord.CategoryChannel] = {}
+    existing_cats = {c.name: c for c in guild.categories}
+
+    for cat_data in sorted(data.get("categories", []), key=lambda x: x.get("position", 0)):
+        old_id = cat_data["id"]
+        name = cat_data["name"]
+        if name in existing_cats:
+            id_to_category[old_id] = existing_cats[name]
+            continue
+        try:
+            ow = _overwrites_from_data(guild, cat_data.get("overwrites", {}))
+            cat = await guild.create_category(
+                name=name, overwrites=ow, reason="Server restore",
+            )
+            id_to_category[old_id] = cat
+            report["categories_created"] += 1
+        except discord.HTTPException as e:
+            report["categories_failed"] += 1
+            report["errors"].append(f"Category '{name}': {e}")
+        await asyncio.sleep(0.3)
+
+    # ---- 3. Restore CHANNELS ----
+    await _update_progress("Restoring channels...")
+    existing_channels = {c.name: c for c in guild.channels}
+
+    for ch_data in sorted(data.get("channels", []), key=lambda x: x.get("position", 0)):
+        name = ch_data["name"]
+        if name in existing_channels:
+            report["channels_skipped"] += 1
+            continue
+
+        ch_type = ch_data.get("type", "text")
+        category_id = ch_data.get("category_id")
+        parent = id_to_category.get(category_id) if category_id else None
+
+        try:
+            ow = _overwrites_from_data(guild, ch_data.get("overwrites", {}))
+        except Exception:
+            ow = {}
+
+        try:
+            if "voice" in ch_type:
+                await guild.create_voice_channel(
+                    name=name, overwrites=ow, category=parent,
+                    bitrate=ch_data.get("bitrate") or 64000,
+                    user_limit=ch_data.get("user_limit") or 0,
+                    reason="Server restore",
+                )
+            elif "forum" in ch_type:
+                # Fallback: forums have extra config; create as text
+                await guild.create_text_channel(
+                    name=name, overwrites=ow, category=parent,
+                    topic=ch_data.get("topic") or "", reason="Server restore",
+                )
+            elif "stage" in ch_type:
+                await guild.create_stage_channel(
+                    name=name, overwrites=ow, category=parent, reason="Server restore",
+                )
+            elif "news" in ch_type or "announcement" in ch_type:
+                try:
+                    await guild.create_text_channel(
+                        name=name, overwrites=ow, category=parent,
+                        topic=ch_data.get("topic") or "",
+                        news=True, reason="Server restore",
+                    )
+                except Exception:
+                    await guild.create_text_channel(
+                        name=name, overwrites=ow, category=parent,
+                        topic=ch_data.get("topic") or "", reason="Server restore",
+                    )
+            else:
+                # default text
+                await guild.create_text_channel(
+                    name=name, overwrites=ow, category=parent,
+                    topic=ch_data.get("topic") or "",
+                    slowmode_delay=ch_data.get("slowmode_delay") or 0,
+                    nsfw=ch_data.get("nsfw", False),
+                    reason="Server restore",
+                )
+            report["channels_created"] += 1
+        except discord.HTTPException as e:
+            report["channels_failed"] += 1
+            report["errors"].append(f"Channel '{name}': {e}")
+        await asyncio.sleep(0.3)
+
+    return report, None
+
+
+async def loadserver_logic(interaction: discord.Interaction):
+    guild = interaction.guild
+    if not guild:
+        await interaction.response.send_message(embed=error_embed("Server Only", ""), ephemeral=True)
+        return
+    owner_id = await _get_guild_owner_id(guild)
+    if owner_id is None or interaction.user.id != owner_id:
+        await interaction.response.send_message(
+            embed=error_embed("Owner Only", "Only the server owner can load the server."),
+            ephemeral=True)
+        return
+
+    if not os.path.exists(backup_path(guild.id)):
+        await interaction.response.send_message(
+            embed=error_embed("No Backup", "No backup exists. Use `/serversave` first."),
+            ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    progress = await interaction.followup.send(
+        embed=embed("⏳ Restoring...", "Starting restore.", COLOR_WARNING),
+        ephemeral=True, wait=True)
+
+    try:
+        report, err = await _loadserver_core(guild, progress)
+        if err:
+            await progress.edit(embed=error_embed("Restore Failed", err))
+            return
+        e = success_embed("Server Restored", "Backup loaded successfully.")
+        e.add_field(name="Roles created", value=str(report["roles_created"]), inline=True)
+        e.add_field(name="Categories", value=str(report["categories_created"]), inline=True)
+        e.add_field(name="Channels created", value=str(report["channels_created"]), inline=True)
+        e.add_field(name="Channels skipped", value=str(report["channels_skipped"]), inline=True)
+        if report["roles_failed"] or report["categories_failed"] or report["channels_failed"]:
+            e.add_field(name="Failed", value=(
+                f"Roles: {report['roles_failed']} | "
+                f"Categories: {report['categories_failed']} | "
+                f"Channels: {report['channels_failed']}"
+            ), inline=False)
+        if report["errors"]:
+            err_text = "\n".join(report["errors"][:5])
+            e.add_field(name="First errors", value=f"```{err_text[:900]}```", inline=False)
+        await progress.edit(embed=e)
+    except Exception as ex:
+        log.exception(f"loadserver failed: {ex}")
+        await progress.edit(embed=error_embed("Restore Failed", str(ex)[:1024]))
+
+
+# =============================================================================
 # =========================== BOT EVENTS ======================================
 # =============================================================================
 
@@ -415,7 +760,6 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
-    # DM handling (ticket feedback)
     if isinstance(message.channel, discord.DMChannel):
         await _handle_dm_feedback(message)
         return
@@ -423,26 +767,17 @@ async def on_message(message: discord.Message):
     if not message.guild:
         return
 
-    # AFK
     await _remove_afk(message)
     await _check_afk(message)
-
-    # XP tracking
-    await _track_xp(message)
-
-    # Credit tracking
     await _track_message_for_credits(message)
 
-    # Automod
     if await _run_automod(message):
         return
 
-    # Wallahi detection
     if re.search(r"(?<!\w)wallahi(?!\w)", message.content, re.IGNORECASE):
         await _handle_wallahi_message(message)
         return
 
-    # Key drop channel
     if message.channel.id == KEY_DROP_CHANNEL_ID:
         await _handle_key_drop(message)
         return
@@ -475,37 +810,233 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
     }
 
 
-@bot.event
-async def on_member_join(member: discord.Member):
-    if not WELCOME_CHANNEL_ID:
+# ---------- ANTINUKE HANDLERS ----------
+
+async def _get_audit_actor(guild: discord.Guild, action: discord.AuditLogAction, target_id: int):
+    """Find the most recent audit log entry for a given action + target."""
+    try:
+        async for entry in guild.audit_logs(limit=10, action=action):
+            if entry.target and getattr(entry.target, "id", None) == target_id:
+                return entry.user, entry
+    except (discord.Forbidden, discord.HTTPException):
+        return None, None
+    return None, None
+
+
+async def _antinuke_punish(guild: discord.Guild, actor: discord.abc.User, reason: str, invite_check: bool = False):
+    """Ban the actor. If they're a bot, also ban whoever invited them."""
+    if actor.id == bot.user.id:
         return
-    ch = member.guild.get_channel(WELCOME_CHANNEL_ID)
+    if actor.id == guild.owner_id:
+        return
+    # Extra safety: don't act on roles above us
+    try:
+        member = guild.get_member(actor.id) or await guild.fetch_member(actor.id)
+    except (discord.NotFound, discord.HTTPException):
+        member = None
+
+    if member and guild.me and member.top_role >= guild.me.top_role:
+        log.warning(f"[ANTINUKE] Cannot ban {actor} — role too high.")
+        await _antinuke_log(guild, f"⚠️ Could not ban **{actor}** ({actor.id}) — role is above mine.")
+        return
+
+    # Ban the actor
+    try:
+        await guild.ban(actor, reason=f"Anti-Nuke: {reason}", delete_message_days=1)
+        await _antinuke_log(guild, f"🔨 Banned **{actor}** (`{actor.id}`) — {reason}")
+    except discord.Forbidden:
+        await _antinuke_log(guild, f"⚠️ Failed to ban **{actor}** — missing permissions.")
+    except discord.HTTPException as e:
+        await _antinuke_log(guild, f"⚠️ Error banning **{actor}** — {e}")
+
+    # If a bot, ban the inviter too
+    if invite_check and isinstance(actor, (discord.User, discord.Member)) and actor.bot:
+        inviter_id = bot.bot_inviters.get(actor.id)
+        if not inviter_id:
+            # try to look it up now
+            try:
+                async for entry in guild.audit_logs(limit=50, action=discord.AuditLogAction.bot_add):
+                    if entry.target and entry.target.id == actor.id:
+                        inviter_id = entry.user.id
+                        break
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+        if inviter_id and inviter_id != guild.owner_id and inviter_id != bot.user.id:
+            try:
+                inviter_member = guild.get_member(inviter_id) or await guild.fetch_member(inviter_id)
+            except (discord.NotFound, discord.HTTPException):
+                inviter_member = None
+            if inviter_member:
+                if inviter_member.top_role >= (guild.me.top_role if guild.me else None):
+                    await _antinuke_log(guild, f"⚠️ Could not ban inviter <@{inviter_id}> — role too high.")
+                else:
+                    try:
+                        await guild.ban(inviter_member,
+                                        reason=f"Anti-Nuke: invited malicious bot {actor}",
+                                        delete_message_days=1)
+                        await _antinuke_log(guild, f"🔨 Banned inviter <@{inviter_id}> for inviting malicious bot **{actor}**")
+                    except (discord.Forbidden, discord.HTTPException) as e:
+                        await _antinuke_log(guild, f"⚠️ Could not ban inviter <@{inviter_id}>: {e}")
+
+
+async def _antinuke_log(guild: discord.Guild, text: str):
+    log.info(f"[ANTINUKE] {guild.name}: {text}")
+    if not LOG_CHANNEL_ID:
+        return
+    ch = guild.get_channel(LOG_CHANNEL_ID)
     if not ch:
         return
-    e = embed("👋 Welcome!",
-        f"Welcome to **{member.guild.name}**, {member.mention}!\n\n"
-        f"You're member **#{member.guild.member_count}**. Enjoy your stay!",
-        COLOR_SUCCESS)
-    e.set_thumbnail(url=member.display_avatar.url)
     try:
-        await ch.send(content=member.mention, embed=e)
+        await ch.send(embed=embed("🛡️ Anti-Nuke", text, COLOR_ERROR))
     except discord.HTTPException:
         pass
+
+
+def _check_threshold(dq: deque, window: int, threshold: int) -> bool:
+    """Check if threshold events happened within window seconds."""
+    now = time.time()
+    # purge old
+    while dq and now - dq[0][0] > window:
+        dq.popleft()
+    return len(dq) >= threshold
+
+
+@bot.event
+async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
+    if not ANTINUKE_ENABLED:
+        return
+    guild = channel.guild
+    actor, entry = await _get_audit_actor(guild, discord.AuditLogAction.channel_delete, channel.id)
+    if not actor:
+        return
+    if actor.id == bot.user.id or actor.id == guild.owner_id:
+        return
+
+    dq = bot.an_channel_delete[guild.id]
+    dq.append((time.time(), actor.id))
+
+    # Only count deletions by the same actor in the window
+    now = time.time()
+    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_CHANNEL_DELETE_WINDOW]
+    if len(same_actor) >= ANTINUKE_CHANNEL_DELETE_THRESHOLD:
+        await _antinuke_log(guild,
+            f"🚨 **{actor}** deleted {len(same_actor)} channels in {ANTINUKE_CHANNEL_DELETE_WINDOW}s "
+            f"(last: `#{channel.name}`). Banning.")
+        await _antinuke_punish(guild, actor,
+            f"deleted {len(same_actor)} channels in {ANTINUKE_CHANNEL_DELETE_WINDOW}s",
+            invite_check=True)
+        dq.clear()
+
+
+@bot.event
+async def on_guild_channel_create(channel: discord.abc.GuildChannel):
+    if not ANTINUKE_ENABLED:
+        return
+    guild = channel.guild
+    actor, entry = await _get_audit_actor(guild, discord.AuditLogAction.channel_create, channel.id)
+    if not actor:
+        return
+    if actor.id == bot.user.id or actor.id == guild.owner_id:
+        return
+
+    dq = bot.an_channel_create[guild.id]
+    dq.append((time.time(), actor.id))
+    now = time.time()
+    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_CHANNEL_CREATE_WINDOW]
+    if len(same_actor) >= ANTINUKE_CHANNEL_CREATE_THRESHOLD:
+        await _antinuke_log(guild,
+            f"🚨 **{actor}** created {len(same_actor)} channels in {ANTINUKE_CHANNEL_CREATE_WINDOW}s. Banning.")
+        await _antinuke_punish(guild, actor,
+            f"mass channel creation ({len(same_actor)} in {ANTINUKE_CHANNEL_CREATE_WINDOW}s)",
+            invite_check=True)
+        dq.clear()
+
+
+@bot.event
+async def on_guild_role_delete(role: discord.Role):
+    if not ANTINUKE_ENABLED:
+        return
+    guild = role.guild
+    actor, entry = await _get_audit_actor(guild, discord.AuditLogAction.role_delete, role.id)
+    if not actor:
+        return
+    if actor.id == bot.user.id or actor.id == guild.owner_id:
+        return
+    dq = bot.an_role_delete[guild.id]
+    dq.append((time.time(), actor.id))
+    now = time.time()
+    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_ROLE_DELETE_WINDOW]
+    if len(same_actor) >= ANTINUKE_ROLE_DELETE_THRESHOLD:
+        await _antinuke_log(guild,
+            f"🚨 **{actor}** deleted {len(same_actor)} roles in {ANTINUKE_ROLE_DELETE_WINDOW}s. Banning.")
+        await _antinuke_punish(guild, actor,
+            f"deleted {len(same_actor)} roles in {ANTINUKE_ROLE_DELETE_WINDOW}s",
+            invite_check=True)
+        dq.clear()
+
+
+@bot.event
+async def on_member_ban(guild: discord.Guild, user: discord.User):
+    if not ANTINUKE_ENABLED:
+        return
+    actor, entry = await _get_audit_actor(guild, discord.AuditLogAction.ban, user.id)
+    if not actor:
+        return
+    if actor.id == bot.user.id or actor.id == guild.owner_id:
+        return
+    dq = bot.an_ban[guild.id]
+    dq.append((time.time(), actor.id))
+    now = time.time()
+    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_BAN_WINDOW]
+    if len(same_actor) >= ANTINUKE_BAN_THRESHOLD:
+        await _antinuke_log(guild,
+            f"🚨 **{actor}** banned {len(same_actor)} members in {ANTINUKE_BAN_WINDOW}s. Banning.")
+        await _antinuke_punish(guild, actor,
+            f"mass banning ({len(same_actor)} in {ANTINUKE_BAN_WINDOW}s)",
+            invite_check=True)
+        dq.clear()
 
 
 @bot.event
 async def on_member_remove(member: discord.Member):
-    if not GOODBYE_CHANNEL_ID:
+    if not ANTINUKE_ENABLED:
         return
-    ch = member.guild.get_channel(GOODBYE_CHANNEL_ID)
-    if not ch:
+    guild = member.guild
+    actor, entry = await _get_audit_actor(guild, discord.AuditLogAction.kick, member.id)
+    if not actor:
         return
-    e = embed("👋 Goodbye", f"**{member}** left the server.", COLOR_ERROR)
-    e.set_thumbnail(url=member.display_avatar.url)
+    # Only treat as kick if the audit entry is recent (< 5s)
     try:
-        await ch.send(embed=e)
-    except discord.HTTPException:
-        pass
+        if (datetime.now(timezone.utc) - entry.created_at).total_seconds() > 5:
+            return
+    except Exception:
+        return
+    if actor.id == bot.user.id or actor.id == guild.owner_id:
+        return
+    dq = bot.an_kick[guild.id]
+    dq.append((time.time(), actor.id))
+    now = time.time()
+    same_actor = [(t, uid) for (t, uid) in dq if uid == actor.id and now - t <= ANTINUKE_KICK_WINDOW]
+    if len(same_actor) >= ANTINUKE_KICK_THRESHOLD:
+        await _antinuke_log(guild,
+            f"🚨 **{actor}** kicked {len(same_actor)} members in {ANTINUKE_KICK_WINDOW}s. Banning.")
+        await _antinuke_punish(guild, actor,
+            f"mass kicking ({len(same_actor)} in {ANTINUKE_KICK_WINDOW}s)",
+            invite_check=True)
+        dq.clear()
+
+
+@bot.event
+async def on_member_join(member: discord.Member):
+    # Track bots that join so we can identify inviter if they later nuke
+    if member.bot:
+        try:
+            async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.bot_add):
+                if entry.target and entry.target.id == member.id:
+                    bot.bot_inviters[member.id] = entry.user.id
+                    break
+        except (discord.Forbidden, discord.HTTPException):
+            pass
 
 
 @bot.event
@@ -677,48 +1208,6 @@ async def _track_message_for_credits(message: discord.Message):
             pass
 
 
-def _xp_for_level(level: int) -> int:
-    return 5 * (level ** 2) + 50 * level + 100
-
-
-async def _track_xp(message: discord.Message):
-    if not message.guild or message.author.bot:
-        return
-    key = (message.guild.id, message.author.id)
-    now = time.time()
-    if now - bot.xp_cooldowns.get(key, 0) < XP_COOLDOWN:
-        return
-    bot.xp_cooldowns[key] = now
-
-    state = _load_guild_state(LEVELS_FILE, message.guild.id)
-    gs = state[str(message.guild.id)]
-    data = gs.setdefault(str(message.author.id), {"xp": 0, "level": 0, "messages": 0})
-    data["xp"] += random.randint(XP_PER_MESSAGE_MIN, XP_PER_MESSAGE_MAX)
-    data["messages"] = data.get("messages", 0) + 1
-
-    leveled_up = False
-    while data["xp"] >= _xp_for_level(data["level"]):
-        data["xp"] -= _xp_for_level(data["level"])
-        data["level"] += 1
-        leveled_up = True
-
-    save_json(LEVELS_FILE, state)
-
-    if leveled_up:
-        e = embed("🎉 Level Up!",
-            f"{message.author.mention} reached **Level {data['level']}**!", COLOR_GOLD)
-        e.set_thumbnail(url=message.author.display_avatar.url)
-        try:
-            if LEVEL_UP_CHANNEL_ID:
-                ch = message.guild.get_channel(LEVEL_UP_CHANNEL_ID)
-                if ch:
-                    await ch.send(embed=e)
-            else:
-                await message.channel.send(embed=e)
-        except discord.HTTPException:
-            pass
-
-
 async def _run_automod(message: discord.Message) -> bool:
     if not AUTOMOD_ENABLED or not message.guild or message.author.bot:
         return False
@@ -729,7 +1218,6 @@ async def _run_automod(message: discord.Message) -> bool:
 
     content_lower = message.content.lower()
 
-    # Bad words
     for w in BAD_WORDS:
         if w and w in content_lower:
             try:
@@ -739,7 +1227,6 @@ async def _run_automod(message: discord.Message) -> bool:
                 pass
             return True
 
-    # Excessive mentions
     if len(message.mentions) > MAX_MENTIONS:
         try:
             await message.delete()
@@ -748,7 +1235,6 @@ async def _run_automod(message: discord.Message) -> bool:
             pass
         return True
 
-    # Caps
     if len(message.content) > 10:
         caps = sum(1 for c in message.content if c.isupper())
         if caps / len(message.content) * 100 > MAX_CAPS_PERCENT:
@@ -759,7 +1245,6 @@ async def _run_automod(message: discord.Message) -> bool:
                 pass
             return True
 
-    # Spam
     key = (message.guild.id, message.author.id)
     dq = bot.spam_tracker[key]
     now = time.time()
@@ -1631,38 +2116,19 @@ async def daily_cmd(ctx):
             mi = r // 60
             await ctx.reply(embed=warning_embed("Already Claimed", f"Come back in **{h}h {mi}m**."))
             return
-    amt = random.randint(DAILY_REWARD_MIN, DAILY_REWARD_MAX)
-    new = add_credit_balance(g, u, amt)
+    new = add_credit_balance(g, u, DAILY_REWARD)
     _set_cd(g, u, "daily", now.isoformat())
-    e = success_embed("💰 Daily Reward", f"You received **{amt}** credits!")
+    e = success_embed("💰 Daily Reward", f"You received **{DAILY_REWARD}** credits!")
     e.add_field(name="New Balance", value=str(new))
-    await ctx.reply(embed=e)
-
-
-@bot.command(name="work")
-@commands.guild_only()
-async def work_cmd(ctx):
-    g, u = ctx.guild.id, ctx.author.id
-    last = _get_cd(g, u, "work")
-    now = datetime.now(timezone.utc)
-    if last:
-        last_dt = datetime.fromisoformat(last)
-        if now - last_dt < timedelta(seconds=WORK_COOLDOWN):
-            rem = timedelta(seconds=WORK_COOLDOWN) - (now - last_dt)
-            await ctx.reply(embed=warning_embed("Tired", f"Rest for **{int(rem.total_seconds())}s**."))
-            return
-    jobs = ["programmer", "chef", "streamer", "designer", "doctor", "teacher"]
-    amt = random.randint(WORK_MIN, WORK_MAX)
-    new = add_credit_balance(g, u, amt)
-    _set_cd(g, u, "work", now.isoformat())
-    e = success_embed("💼 Work Complete", f"You worked as a **{random.choice(jobs)}** and earned **{amt}** credits!")
-    e.add_field(name="Balance", value=str(new))
     await ctx.reply(embed=e)
 
 
 @bot.command(name="rob")
 @commands.guild_only()
 async def rob_cmd(ctx, member: discord.Member):
+    if not is_jew_mode(ctx.author):
+        await ctx.reply(embed=error_embed("Access Denied", "Only **Jew Mode** users can rob."))
+        return
     if member.id == ctx.author.id or member.bot:
         await ctx.reply(embed=error_embed("Invalid Target", ""))
         return
@@ -1847,48 +2313,6 @@ class BuyMenuView(discord.ui.View):
     @discord.ui.button(label="Buy Wallahis", style=discord.ButtonStyle.success)
     async def buy_wallahis(self, interaction, _b):
         await interaction.response.send_modal(BuyWallahiModal(self.guild, self.member))
-
-
-# =============================================================================
-# ============================ LEVELING SYSTEM ================================
-# =============================================================================
-
-@bot.command(name="rank", aliases=["level"])
-@commands.guild_only()
-async def rank_cmd(ctx, member: discord.Member = None):
-    target = member or ctx.author
-    state = _load_guild_state(LEVELS_FILE, ctx.guild.id)
-    gs = state[str(ctx.guild.id)]
-    data = gs.setdefault(str(target.id), {"xp": 0, "level": 0, "messages": 0})
-    needed = _xp_for_level(data["level"])
-    e = embed(f"📊 {target.display_name}'s Rank", color=COLOR_PRIMARY)
-    e.add_field(name="Level", value=str(data["level"]), inline=True)
-    e.add_field(name="XP", value=f"{data['xp']}/{needed}", inline=True)
-    e.add_field(name="Messages", value=str(data.get("messages", 0)), inline=True)
-    bar_len = 20
-    filled = int((data["xp"] / needed) * bar_len) if needed else 0
-    e.add_field(name="Progress", value="`" + "█" * filled + "░" * (bar_len - filled) + "`", inline=False)
-    e.set_thumbnail(url=target.display_avatar.url)
-    await ctx.reply(embed=e)
-
-
-@bot.command(name="lvl_lb", aliases=["top_xp"])
-@commands.guild_only()
-async def xp_lb_cmd(ctx):
-    state = _load_guild_state(LEVELS_FILE, ctx.guild.id)
-    gs = state[str(ctx.guild.id)]
-    entries = []
-    for uid, d in gs.items():
-        if isinstance(d, dict):
-            entries.append((int(uid), d.get("level", 0), d.get("xp", 0)))
-    entries.sort(key=lambda x: (x[1], x[2]), reverse=True)
-    e = embed("🏆 XP Leaderboard", color=COLOR_GOLD)
-    for i, (uid, lvl, xp) in enumerate(entries[:10], 1):
-        medal = ["🥇","🥈","🥉"][i-1] if i <= 3 else f"#{i}"
-        e.add_field(name=f"{medal} <@{uid}>", value=f"Level **{lvl}** • {xp} XP", inline=False)
-    if not entries:
-        e.description = "No data yet."
-    await ctx.reply(embed=e)
 
 
 # =============================================================================
@@ -2217,20 +2641,6 @@ async def ping_slash(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed("🏓 Pong!", f"Latency: `{round(bot.latency*1000)}ms`"))
 
 
-@bot.tree.command(name="rank", description="Check your rank")
-async def rank_slash(interaction: discord.Interaction, member: discord.Member = None):
-    target = member or interaction.user
-    state = _load_guild_state(LEVELS_FILE, interaction.guild.id)
-    gs = state[str(interaction.guild.id)]
-    data = gs.setdefault(str(target.id), {"xp": 0, "level": 0, "messages": 0})
-    needed = _xp_for_level(data["level"])
-    e = embed(f"📊 {target.display_name}'s Rank", color=COLOR_PRIMARY)
-    e.add_field(name="Level", value=str(data["level"]))
-    e.add_field(name="XP", value=f"{data['xp']}/{needed}")
-    e.set_thumbnail(url=target.display_avatar.url)
-    await interaction.response.send_message(embed=e)
-
-
 @bot.tree.command(name="balance", description="Check your balance")
 async def balance_slash(interaction: discord.Interaction, member: discord.Member = None):
     target = member or interaction.user
@@ -2240,6 +2650,26 @@ async def balance_slash(interaction: discord.Interaction, member: discord.Member
     e.add_field(name="Credits", value=bal_text)
     e.add_field(name="Wallahis", value=str(get_wallahi_count(interaction.guild.id, target.id)))
     e.set_thumbnail(url=target.display_avatar.url)
+    await interaction.response.send_message(embed=e)
+
+
+@bot.tree.command(name="daily", description="Claim your daily 5 credits")
+async def daily_slash(interaction: discord.Interaction):
+    g, u = interaction.guild.id, interaction.user.id
+    last = _get_cd(g, u, "daily")
+    now = datetime.now(timezone.utc)
+    if last:
+        last_dt = datetime.fromisoformat(last)
+        if now - last_dt < timedelta(hours=24):
+            rem = timedelta(hours=24) - (now - last_dt)
+            h, r = divmod(int(rem.total_seconds()), 3600)
+            mi = r // 60
+            await interaction.response.send_message(embed=warning_embed("Already Claimed", f"Come back in **{h}h {mi}m**."), ephemeral=True)
+            return
+    new = add_credit_balance(g, u, DAILY_REWARD)
+    _set_cd(g, u, "daily", now.isoformat())
+    e = success_embed("💰 Daily Reward", f"You received **{DAILY_REWARD}** credits!")
+    e.add_field(name="New Balance", value=str(new))
     await interaction.response.send_message(embed=e)
 
 
@@ -2271,6 +2701,35 @@ async def removec_slash(interaction: discord.Interaction, member: discord.Member
     e = success_embed("Removed", f"Removed **{before - new}** from {member.mention}.")
     e.add_field(name="Balance", value=str(new))
     await interaction.response.send_message(embed=e)
+
+
+@bot.tree.command(name="pay", description="Pay another user credits")
+async def pay_slash(interaction: discord.Interaction, member: discord.Member, amount: int):
+    if member.id == interaction.user.id or member.bot:
+        await interaction.response.send_message(embed=error_embed("Invalid Target", ""), ephemeral=True)
+        return
+    if amount < 1:
+        await interaction.response.send_message(embed=error_embed("Invalid Amount", ""), ephemeral=True)
+        return
+    g = interaction.guild.id
+    bal = get_credit_balance(g, interaction.user.id)
+    if not is_jew_mode(interaction.user) and bal < amount:
+        await interaction.response.send_message(embed=error_embed("Not Enough", f"You have **{bal}**."), ephemeral=True)
+        return
+    if not is_jew_mode(interaction.user):
+        add_credit_balance(g, interaction.user.id, -amount)
+    add_credit_balance(g, member.id, amount)
+    await interaction.response.send_message(embed=success_embed("💸 Payment Sent", f"Sent **{amount}** to {member.mention}."))
+
+
+@bot.tree.command(name="serversave", description="Save the server (owner only)")
+async def serversave_slash(interaction: discord.Interaction):
+    await serversave_logic(interaction)
+
+
+@bot.tree.command(name="loadserver", description="Restore the server from backup (owner only)")
+async def loadserver_slash(interaction: discord.Interaction):
+    await loadserver_logic(interaction)
 
 
 @bot.tree.command(name="botinfo", description="Bot information")
@@ -2330,7 +2789,6 @@ async def main():
 
     asyncio.create_task(_run_web_server())
 
-    # Graceful shutdown
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
 
